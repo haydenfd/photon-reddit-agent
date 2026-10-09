@@ -1,11 +1,13 @@
 {
-  "name": "personal-assistant",
+  "name": "photon-reddit-agent",
   "version": "0.0.1",
   "private": true,
   "type": "module",
   "scripts": {
     "start": "bun src/index.ts",
-    "dev": "bun --watch src/index.ts"
+    "dev": "bun --watch src/index.ts",
+    "check": "tsc --noEmit",
+    "test": "bun test"
   },
   "dependencies": {
     "spectrum-ts": "^12.10.1"
