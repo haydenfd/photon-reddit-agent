@@ -1,0 +1,22 @@
+[
+  {
+    "id": "/r/demo/comments/crm_demo/practice",
+    "post": {
+      "title": "Synthetic CRM smoke test: mock interview practice",
+      "body": "Invented example for local testing; no Reddit request or model call.",
+      "url": "https://www.reddit.com/r/demo/comments/crm_demo/practice/",
+      "subreddit": "demo"
+    },
+    "result": {
+      "topic": "mock_platform",
+      "timing": "unknown",
+      "score": 3,
+      "confidence": 0.95,
+      "priority": "high",
+      "reason": "Synthetic fixture; not a live Jev result.",
+      "model": "fixture-not-a-model-call",
+      "rubricVersion": "algovox-v1",
+      "evaluatedAt": "2026-10-10T00:00:00Z"
+    }
+  }
+]

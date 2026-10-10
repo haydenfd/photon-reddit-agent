@@ -4,12 +4,16 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "bun src/index.ts",
-    "dev": "bun --watch src/index.ts",
+    "start": "bun --no-env-file src/index.ts",
+    "dev": "bun --no-env-file --watch src/index.ts",
     "check": "tsc --noEmit",
-    "test": "bun test",
-    "leads": "bun src/leads.ts",
-    "leads:demo": "bun src/leads.ts examples/leads.json --demo"
+    "test": "bun --no-env-file test",
+    "test:d1": "node scripts/test-crm.mjs",
+    "crm:dev": "node scripts/local-crm.mjs",
+    "crm": "bun --no-env-file src/crm-cli.ts",
+    "crm:import": "bun --no-env-file src/import-sqlite.ts",
+    "leads": "bun --no-env-file src/leads.ts",
+    "leads:demo": "bun --no-env-file src/leads.ts examples/leads.json --demo"
   },
   "dependencies": {
     "@photon-ai/advanced-imessage": "2.2.0",

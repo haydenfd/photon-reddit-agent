@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { Database } from "bun:sqlite";
+import { CrmClient } from "./crm-client.ts";
 import { classifyLead, LEVELS, parseClassification, parsePosts } from "./jev.ts";
 import { formatReport, notifyBatch, prepareBatch } from "./leads.ts";
 
@@ -51,8 +51,8 @@ test("Jev gets the owner rubric separately from untrusted post text", async () =
   }
 });
 
-test("stored posts deduplicate classification; failed sends preserve pending candidates", async () => {
-  const db = new Database(":memory:");
+(process.env.TEST_CRM_URL ? test : test.skip)("stored posts deduplicate classification; failed sends preserve pending candidates", async () => {
+  const db = new CrmClient(process.env.TEST_CRM_URL, process.env.CRM_API_TOKEN);
   let calls = 0;
   const posts = parsePosts([
     { title: "Mock platform recommendations", body: "" },
@@ -73,24 +73,24 @@ test("stored posts deduplicate classification; failed sends preserve pending can
     await notifyBatch(pending, db, async text => {
       expect(text).toContain("URGENT");
       expect(text).toContain(posts[1]!.url!);
-      return "message-1";
+      return { messageId: "message-1", platform: "imessage", spaceId: "test-chat" };
     });
     expect(await prepareBatch(posts, db, classify)).toHaveLength(0);
     await prepareBatch([{ ...posts[1]!, body: "Updated details" }], db, classify);
     expect(calls).toBe(4);
     expect(await prepareBatch(posts, db, classify)).toHaveLength(0);
-  } finally { db.close(); }
+  } finally { /* D1 belongs to the integration test runtime. */ }
 });
 
-test("a report sends at most five candidates and retains the rest", async () => {
-  const db = new Database(":memory:");
+(process.env.TEST_CRM_URL ? test : test.skip)("a report sends at most five candidates and retains the rest", async () => {
+  const db = new CrmClient(process.env.TEST_CRM_URL, process.env.CRM_API_TOKEN);
   try {
     const posts = parsePosts(Array.from({ length: 7 }, (_, i) => ({ title: `Mock platform ${i}`, body: "" })));
     const classify = async () => parseClassification(answer(3, 0.95, "mock_platform", "unknown"), at);
     const pending = await prepareBatch(posts, db, classify);
     expect(formatReport(pending, true)).toContain("DEMO — synthetic posts");
     expect(formatReport(pending)).toContain("5 of 7");
-    await notifyBatch(pending, db, async () => "message-2");
+    await notifyBatch(pending, db, async () => ({ messageId: "message-2", platform: "imessage", spaceId: "test-chat" }));
     expect(await prepareBatch(posts, db, classify)).toHaveLength(2);
-  } finally { db.close(); }
+  } finally { /* D1 belongs to the integration test runtime. */ }
 });
