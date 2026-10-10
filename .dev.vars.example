@@ -1,0 +1,11 @@
+# Local Worker configuration only; the existing .env belongs to the Bun bot.
+ADMIN_TOKEN="local-development-only"
+NOTIFY_ENABLED="false"
+# Optional until you want live classification:
+# JEV_API_KEY=""
+# Photon configuration, only after its HTTP gateway is verified:
+# OWNER_PHONE=""
+# SPECTRUM_PROJECT_ID=""
+# SPECTRUM_PROJECT_SECRET=""
+# SPECTRUM_SIGNING_SECRET=""
+# IMESSAGE_HTTP_ADDRESS=""

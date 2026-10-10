@@ -7,13 +7,20 @@
     "start": "bun src/index.ts",
     "dev": "bun --watch src/index.ts",
     "check": "tsc --noEmit",
-    "test": "bun test"
+    "test": "bun test",
+    "leads": "bun src/leads.ts",
+    "leads:demo": "bun src/leads.ts examples/leads.json --demo"
   },
   "dependencies": {
+    "@photon-ai/advanced-imessage": "2.2.0",
+    "@spectrum-ts/core": "12.10.1",
     "spectrum-ts": "^12.10.1"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261009.1",
+    "@types/bun": "latest",
+    "miniflare": "^5.20261006.1-alpha",
     "typescript": "^5",
-    "@types/bun": "latest"
+    "wrangler": "^4.149.0"
   }
 }
