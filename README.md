@@ -1,158 +1,189 @@
-# Photon Reddit Agent
+# Photon Reddit lead agent
 
-A TypeScript app using [Photon Spectrum](https://photon.codes/docs/spectrum-ts)
-to receive iMessages and reply with `echo: <your text>`.
-
-Read [How this app works](docs/architecture.md) for diagrams of the current setup,
-message and grading walkthroughs, beginner concepts, and the proposed future loop.
-
-## Environment
-
-The original local setup has credentials in the ignored `.env`.
-For a fresh clone, copy `.env.example` to `.env` and set the two Spectrum
-credentials from your Photon project settings.
-Never commit or share that file. If authentication fails, verify `SPECTRUM_PROJECT_ID`
-and `SPECTRUM_PROJECT_SECRET` in your project settings.
-
-## Run
+Run the local CRM first. No Cloudflare account, model account, or iMessage connection is needed.
 
 ```sh
-bun install --frozen-lockfile
-bun start
+bun --no-env-file install --frozen-lockfile
+export CRM_API_TOKEN='local-example-token-change-me'
+bun --no-env-file run crm:dev
 ```
 
-1. Add your phone from the top-right avatar menu in the [Photon dashboard](https://app.photon.codes/dashboard/3693d23f-a283-4dcc-a8e9-3009bfa0bdeb/getting-started).
-2. Refresh getting started to enroll your phone and show your assigned line.
-3. Run `bun start` from this directory and leave it running.
-4. Text `hello` to that line from your registered phone. Expect `echo: hello`.
+This starts the Worker at `http://127.0.0.1:8787`, applies checked-in migrations,
+and persists **local D1** under `data/d1`. It never reads `.env` or `.dev.vars`.
+Notifications are disabled. Stop it with Ctrl-C; restarting preserves records.
+Use this runner for local database access, rather than a separate Wrangler dev store.
 
-Free/Pro uses Photon's shared number pool; recipients must be registered with
-the project. No dedicated line is provisioned by this app.
-The app runs on this Mac today: keep the process running and the Mac awake.
-Deployment is only needed when you want it running independently of this Mac.
+## Two-minute smoke test
 
-## Verify
+In a second terminal in this repo:
 
 ```sh
-bun run check
-bun test
+export CRM_API_TOKEN='local-example-token-change-me'
+export CRM_URL='http://127.0.0.1:8787'
+bun --no-env-file run crm upsert_leads examples/graded-leads.json
+bun --no-env-file run crm process_feedback examples/feedback-event.json
+bun --no-env-file run crm get_lead /r/demo/comments/crm_demo/practice
 ```
 
-The automated tests check the echo loop, classifier validation, rubric requests,
-deduplication, report ordering, and failed sends without contacting providers.
-Actual iMessage delivery requires the phone test above.
+Expect one synthetic lead, status `useful`, its unchanged fixture grade, and one
+feedback history entry. Run `process_feedback` again: `duplicate: true` and still
+one history entry. Restart `crm:dev` and repeat `get_lead`: the record remains.
+These fixtures make **zero model calls and send zero messages**. The source URL is invented.
 
-## Classify a batch with Jev
+## Agent tools
 
-Set `JEV_API_KEY` and `OWNER_PHONE` (your personal number, including `+` and
-country code) in the local `.env`. `JEV_MODEL` defaults to `jev-latest`.
+Codex uses these through its existing shell tools. Set `CRM_URL` and
+`CRM_API_TOKEN` in the process environment; tokens are not CLI arguments.
+No MCP server or extra agent framework is required.
 
 ```sh
-# Synthetic examples, live Jev classification, no message sent:
-bun run leads:demo
+bun --no-env-file run crm list_leads
+bun --no-env-file run crm list_leads dismissed
+bun --no-env-file run crm list_leads all 25 25   # offset, limit; follow nextOffset
+bun --no-env-file run crm list_leads alerts 0 100
+bun --no-env-file run crm get_lead '<lead ID>'
+bun --no-env-file run crm set_lead_status '<lead ID>' contacted
+bun --no-env-file run crm record_feedback '<lead ID>' dismissed 'Their interview already happened.'
+bun --no-env-file run crm upsert_leads examples/graded-leads.json
+bun --no-env-file run crm process_feedback examples/feedback-event.json
+```
 
-# Classify your own JSON batch and send the top five matches:
-bun run leads -- posts.json --notify
+`set_lead_status` changes current workflow state. `record_feedback` also appends
+a dated verdict/reason and sets that state. `get_lead` returns the current post,
+grade, feedback history, grade revisions, and report/message references. History
+is retained in full; the API returns the latest 100 feedback/revision entries.
+Lead listing has explicit pagination (default 25, maximum 100).
 
-# Send an explicitly labeled synthetic demo to your phone:
-bun run leads:demo --notify
+The authenticated application API uses `POST /api/<operation>` with JSON objects:
+
+| Operation | Input |
+|---|---|
+| `upsert_leads` | `{ "leads": [{ "id": "...", "post": { "title": "...", "body": "..." }, "result": { ... } }] }`; 1–20, ID optional and derived/validated |
+| `list_leads` | `{ "status": "useful", "limit": 25, "offset": 0, "alertsOnly": false }`; all fields optional |
+| `get_lead` | `{ "id": "..." }` |
+| `set_lead_status` | `{ "id": "...", "status": "new|useful|dismissed|contacted" }` (choose one status) |
+| `record_feedback` | `{ "id": "...", "verdict": "dismissed", "reason": "..." }` |
+
+Requests require `Authorization: Bearer <CRM_API_TOKEN>` and `application/json`.
+The token must have at least 16 characters. Bodies are capped at 1 MB, posts at
+20,000 title/body characters, and feedback reasons at 2,000 characters. SQL uses
+bound parameters. Invalid inputs return 400, missing credentials 401, unknown
+lead IDs 404, and conflicting report operations 409. `result: null` explicitly
+stores an ungraded post; grades must preserve the existing numeric thresholds.
+Cloudflare management credentials are never accepted by these tools.
+
+Internal application operations support `create_report`, `record_submission`,
+`process_feedback`, `import_legacy` (1–10 records), and `get_config`.
+`record_submission` is disabled in the local runner. Integration tests use fake
+submission records in their own temporary D1 database, without Spectrum access.
+
+## Database ownership and the old SQLite file
+
+D1 now owns regular batches and CRM changes. No runtime writes `data/leads.sqlite`.
+If an older checkout has that file, explicitly import it with the CRM running:
+
+```sh
+bun --no-env-file run crm:import data/leads.sqlite
+```
+
+The importer opens SQLite **read-only**, preserves grades/submission timestamps
+and message IDs, and is safe to repeat: existing D1 lead rows are never overwritten.
+Retain the SQLite source as a backup. This checkout had no legacy SQLite file at
+implementation time; preservation was verified with a populated fixture.
+Migrations are additive and tracked in `d1_migrations`. Do not edit an applied migration.
+
+Old SQLite reports did not store item ordering or conversation IDs. Imported
+links retain `item_index: null` / unknown conversation; numbered legacy replies
+ask for clarification. Use an explicit lead ID for those records.
+
+## Manual Jev batches
+
+With the local CRM running and a Jev key explicitly exported into your shell:
+
+```sh
+# This command makes live Jev calls; it is not part of the offline smoke test.
+bun --no-env-file run leads posts.json
 ```
 
 Input is an array of `{ "title": "...", "body": "...", "url": "...", "subreddit": "..." }`.
-Only title and body are required; URLs must be Reddit post permalinks.
-The example file contains invented posts, not scraped Reddit content.
+Only title/body are required. URLs must be HTTPS Reddit post permalinks.
+The app does not fetch the URL. Unchanged posts with the same rubric reuse their
+grade; changed posts retain earlier grades as revisions. Existing Jev criteria
+and thresholds remain: 2.5+ qualifies, 3.5+ is urgent, confidence below 0.5 goes
+to review. The parser derives priority from those scores, rather than recalculating deadlines.
 
-Upcoming SWE interviews, intern/new-grad recruiting cycles, interview-focused
-LeetCode, and requests for mock platforms, partners, or feedback score highly.
-An explicit relevant deadline within 14 days is urgent. Jev scores from 0–4;
-scores of 2.5+ qualify, 3.5+ are urgent, and score confidence below 0.5 requires
-review. Confidence is model certainty, not conversion likelihood. Report reasons
-come from the rubric labels, not generated explanations.
+Manual batches select unsubmitted `new`/`useful` high/urgent leads by score and
+save a preview containing up to five items. Dismissed/contacted leads are
+excluded. Previewing does not mark leads submitted. `--demo` labels synthetic
+reports; demo records now persist in the selected D1 store. For repeatable demos,
+use the isolated integration suite. The legacy `leads:demo` command still makes
+live Jev calls against synthetic input; the smoke fixture avoids those calls.
 
-Regular batches save posts, grades, and message-submission status in the ignored
-`data/leads.sqlite`. Identical posts reuse their grade; submitted posts are not
-sent again. Failed sends leave candidates pending. The demo uses memory only,
-so it can be repeated. Submission does not prove phone delivery; a crash between
-sending and saving can cause a repeat. Fetching, timers, feedback, and conversational
-intelligence are still pending.
+## Feedback and live messaging
 
-## Checkpoint — 2026-10-09
+The local feedback command accepts an event with `platform`, `spaceId`,
+`messageId`, `text`, and optional `targetMessageId`. Explicit commands are:
 
-- Live inbound iMessage and `echo:` replies verified on the owner's phone.
-- Proactive SDK sending verified: the owner received a Reddit post link from
-  the assigned Photon bot line. The batch command above now sends lead reports.
-- Only the correct personal recipient remains enrolled in Photon; the mistaken
-  extra recipient was removed. `.env` stays local and excluded from Git.
-- `bun run check` and all five tests pass. Live Jev graded the synthetic
-  upcoming-interview example 3.99/4 urgent, mock-platform request 3.00/4 high,
-  and new-grad cycle 3.02/4 high; graduation photos were skipped. Photon metadata
-  confirmed the labeled three-candidate demo was sent and delivered with no
-  send error. An initial send returned HTTP 502; the second attempt succeeded.
-- Codex with the existing ChatGPT login is the selected future brain; it is
-  not connected yet. Jev batch grading is implemented; Reddit scanning, scheduling,
-  and migration of this Photon app are deferred.
+```text
+Useful <lead ID>: relevant practice request
+Dismiss <lead ID>: their interview already happened
+Contacted <lead ID>: reached out manually
+```
 
-## Maritime runtime checkpoint — 2026-10-09
+For a threaded reply to a recorded report message:
 
-The `photon-reddit-agent` agent was created on the owner's free Maritime account
-using the built-in `codex` template. Open it at <https://maritime.sh/agents>.
+```text
+Dismiss 2: their interview already happened.
+```
 
-- At provisioning, verified `status: active`, `sleepPolicy: auto-sleep`, and `desktopEnabled: false`.
-- Remote execution returned `codex-cli 0.154.0`; the template's `/health` returned HTTP 200.
-- This repository is linked through the ignored `.maritime/project.json`.
-- Only the Codex runtime is hosted so far. This repo's Photon receiver and lead
-  batch commands still run locally. No Photon or Jev credentials were uploaded,
-  and no model call was made during verification.
+Spectrum 12.10.1 represents threaded text as `content.type === "reply"`, with
+nested `content.content` and `content.target.id`. Resolution checks the stored
+platform, conversation, target message, and item number. A bare verdict works
+only on a one-item report. Missing, unknown, or ambiguous targets ask which lead;
+no latest-report guess is made. Event IDs are deduplicated transactionally in D1,
+including concurrent replays and restarts. Outgoing events are ignored.
+Feedback is saved for later rubric/model context; it does not retrain Jev.
 
-Free hosting supports three saved agents, one awake at a time, with 2 GB RAM and
-5 GB disk per agent. The workspace and sign-in persist under `/data`; tasks can
-wake the VM and launch `codex exec`, then it sleeps when idle. Always-on and
-desktop resources require a paid plan. See [runtime limits](https://maritime.sh/docs/limits)
-and [Codex template](https://maritime.sh/docs/frameworks/codex).
+The Photon entry point remains `bun start`, but it now requires explicit
+`NOTIFY_ENABLED=true`, owner authorization through `OWNER_PHONE`, application
+CRM credentials, and an authenticated CRM whose notification setting is enabled.
+The local runner always disables that setting, so it cannot open a live Photon
+connection. For a future separately configured live sender, export
+`SPECTRUM_PROJECT_ID`, `SPECTRUM_PROJECT_SECRET`, and `OWNER_PHONE`; if Photon
+authentication fails, verify them at [Photon](https://app.photon.codes).
+Only the owner's messages can change leads. Unrecognized owner text keeps the
+old echo behavior; replayed events receive no second acknowledgement.
 
-Next, open the agent's Terminal and run `codex login --device-auth` to sign in
-with the owner's ChatGPT account. Without that login or an explicitly configured
-OpenAI key, the template defaults to Maritime's separately billed AI-credit proxy.
-After login, verify one Codex task before connecting Photon webhooks or scheduling jobs.
+`--notify` on a batch has the same explicit opt-in and CRM preflight. A successful
+send records a report/message relationship and submission time; submission is
+not proof of delivery. Sending and saving are not atomic: a crash after Photon
+accepts the message can cause a repeat on retry. Delivery reconciliation remains
+pending before automatic notifications. A crash after saving inbound feedback
+but before acknowledgement can leave feedback saved without a visible response.
 
-The later documentation check observed the agent sleeping with zero chat-task
-invocations. No Reddit scan, Photon connection, or recurring job is running there.
+## Verification
 
-## Unfinished Cloudflare scaffold
+```sh
+bun --no-env-file run check
+bun --no-env-file test
+bun --no-env-file run test:d1
+```
 
-`wrangler.jsonc`, `.dev.vars.example`, and `migrations/0001_cloud.sql` preserve an
-earlier hosting experiment. They are not deployed or runnable as a Worker:
-`src/worker.ts` is missing and the D1 ID is a placeholder. The declared cron is
-inactive until deployment. See the [architecture guide](docs/architecture.md#where-cloudflare-stands)
-before using these files; the local Bun app does not use that migration.
+`test:d1` builds the actual Worker, uses Miniflare/workerd's local D1 with isolated
+credentials, runs **11 tests / 106 assertions**, and performs additional restart
+and legacy-migration assertions. It covers authentication, invalid/bounded
+requests, preserving grades, append-only feedback, report-item resolution,
+concurrent/replayed inbound events, outgoing-event filtering, read-only SQLite
+import, failed sends, and retaining candidates beyond five. Plain `bun test`
+runs unit tests and explicitly skips cases requiring that D1 runtime.
+No test sends a real iMessage or invokes a paid model.
 
-## Roadmap / todo docket
+## Roadmap
 
-These steps are not complete. Manual Jev grading and SQLite processing/submission
-records are the first slice; Reddit access, feedback, scheduling, and hosting remain open.
+1. [x] **Local mini CRM:** D1 schema/migrations, authenticated Worker API, shell tools, explicit legacy import, manual-batch integration, and tested feedback loop.
+2. [ ] **Connect Cloudflare later:** owner account, CLI authorization, real database/configuration, remote migrations/secrets, and verified remote read/write. See [the checklist](docs/connect-cloudflare.md); none has run.
+3. [ ] **Reddit access:** confirm the permitted access route and verify one authorized post read before implementing fetching or choosing a watchlist.
+4. [ ] **Scanning and grading quality:** add fetching/scheduling after access works; use saved feedback to review rubric quality without assuming automatic training.
+5. [ ] **Outreach and continuous operation:** owner-reviewed drafts, notification reconciliation, and deployment/runtime integration. Maritime's Codex runtime remains separate from this app.
 
-1. [ ] **Figure out Reddit access and credentials.** Confirm the permitted
-   access route for AlgoVox lead discovery, obtain any required approval and
-   OAuth credentials, and verify one post can be read before building a monitor.
-2. [ ] **Persist leads and feedback as a mini CRM.** Choose the simplest storage
-   that survives restarts. Keep post/user references, processing status, scoring
-   results, and whether an alert was sent, so the agent can revisit and update
-   records without sending duplicates. Record owner feedback such as
-   “false positive,” “not relevant,” and the reason; keep dismissed, useful,
-   and contacted leads distinguishable.
-3. [ ] **Define the intelligence and scoring layer.** Decide what AlgoVox fit
-   means and which signals matter: an upcoming coding interview, a request for
-   practice or feedback, and a concrete need the product can address. Choose
-   the input context, score/decision shape, explanation, and alert threshold.
-   Evaluate Jev versus the Codex brain on real examples, including false
-   positives; use saved feedback to refine the criteria and check whether
-   quality improves. Do not assume every interview-related post is a lead.
-4. [ ] **Choose subreddits and build the monitoring loop.** Start with a small
-   watchlist and define relevant posts, comments, and lookback windows. Add
-   fetching every 30–60 minutes, deduplication, classification, and iMessage reports containing
-   the post link and why it matched. Persist processing and delivery outcomes.
-5. [ ] **Later: draft outreach and run continuously.** Generate a suggested
-   reachout message for useful leads and send the draft to the owner for review.
-   Track the owner's outreach status. Connect hosted execution and external
-   scheduling so monitoring can continue when the laptop is off, including
-   a runtime that wakes for each task and sleeps between runs.
+See [the architecture guide](docs/architecture.md) for the running components and ownership boundaries.
