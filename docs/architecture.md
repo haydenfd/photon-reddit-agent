@@ -8,6 +8,11 @@ configured or tested. Scanning runs locally with offline fixtures; the OAuth
 adapter is implemented but live Reddit/Jev access, hosted timers, outreach, and
 application integration remain pending.
 
+For the proposed Photon -> Codex conversation bridge, tool exposure, session
+resumption, persistence/retry behavior, and a read-only Claude review prompt,
+see [the agent design proposal](agent-design.md). It separates implemented code
+from proposed changes and unverified provider behavior.
+
 ## Current components
 
 ```mermaid
@@ -124,14 +129,18 @@ They do not verify live provider access or Cloudflare Free's CPU budget.
 flowchart LR
   Owner["You"] --> Photon["Photon: messaging transport"]
   subgraph VM["Maritime VM — connection still pending"]
-    Agent["Application + Codex"]
-    Sender["Report sender — still pending"]
+    Agent["Codex runtime + CRM CLI"]
   end
-  Photon --> Agent
   subgraph CF["Cloudflare Worker — currently local"]
+    Bridge["HTTP ingress + turn coordinator — proposed"]
     API["Authenticated CRM API"]
     Scanner["Shared scan function"]
+    Sender["Report sender — still pending"]
   end
+  Photon -.->|"verified webhook required"| Bridge
+  Bridge -.->|"Maritime API; stable conversation ID"| Agent
+  Agent -.->|"completed answer"| Bridge
+  Bridge -.-> Photon
   Agent -->|"lead tools"| API
   Cron["Cron trigger or manual API"] --> Scanner
   Reddit["External Reddit API"] -->|"posts"| Scanner
@@ -143,12 +152,23 @@ flowchart LR
   Sender -.-> Photon
 ```
 
-Photon is the transport; the application/Codex process belongs in the VM.
+Photon is the transport; Codex and its shell tools belong in the VM. The
+proposed hosted application ingress/coordinator belongs beside the CRM API,
+with its exact completion/delivery mechanism still to be decided.
 Reddit and Jev are external services called by the scanner, rather than services
 we host inside Cloudflare. VM tools use our authenticated CRM API, rather than
 Cloudflare management credentials. A report sender still needs to connect stored
 previews to Photon; saving to D1 does not itself deliver a notification. The
 existing Bun sender has not been deployed or wired to drain scheduled previews.
+
+The proposed first runtime is Maritime's existing Codex template: each message
+starts a run that resumes a saved thread using a stable conversation ID. CRM
+commands are documented executables invoked through Codex's shell tool; no
+second agent framework is planned. The current handler still echoes ordinary
+text. Session routing, agent-turn recovery, and numbered chat-selection links
+are not implemented. The proposal identifies the external wake-up path needed
+for a sleeping VM to receive iMessages; the current Spectrum gRPC subscription
+alone does not establish that path.
 
 ## Feedback path
 
@@ -225,9 +245,12 @@ Local CRM access needs the Worker process running. With the laptop off, this
 application has no running API, receiver, grader, or scanner. Remote D1 and
 Cloudflare account access are pending; see [Connect Cloudflare later](connect-cloudflare.md).
 
-Next work remains bounded: verify live Reddit access, connect the future database
-account, review grading against stored feedback, complete pagination/monitoring, activate the prepared schedule, and
-later implement owner-reviewed outreach and hosting integration. The
+The next local slice proposed for review is the conversation bridge with fake
+runtime/messaging clients, persistent session routing, and mutation/delivery
+recovery against actual local D1. Subsequent work includes live Reddit access,
+database account setup, grading review against feedback, pagination/monitoring,
+and activation of the prepared schedule/report sender after live verification.
+Owner-reviewed outreach remains later work. The
 [README roadmap](../README.md#roadmap) tracks those actions. No hosted cron, cloud
 signup, deployment, provisioning, or paid model call was performed here.
 

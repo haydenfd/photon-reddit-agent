@@ -251,9 +251,9 @@ No test calls live Reddit, sends a real iMessage, or invokes a paid model.
 ## Roadmap
 
 1. [x] **Local CRM and scan groundwork:** shared scheduled/manual scan function, offline demo, bounded OAuth adapter, run history/leases/cooldowns; D1 schema/migrations, authenticated Worker API, shell tools, explicit legacy import, manual-batch integration, and tested feedback loop.
-2. [ ] **Connect Cloudflare later:** owner account, CLI authorization, real database/configuration, remote migrations/secrets, and verified remote read/write. See [the checklist](docs/connect-cloudflare.md); none has run.
-3. [ ] **Live Reddit access:** configure OAuth and a watchlist; verify one authenticated post read and its limits. The adapter is implemented and tested with fixtures.
-4. [ ] **Complete monitoring:** add pagination/catch-up for busy communities, verify real grading/CPU usage, and review saved feedback. Activate the prepared schedule only after remote setup works.
-5. [ ] **Outreach and continuous operation:** owner-reviewed drafts, notification reconciliation, and deployment/runtime integration. Maritime's Codex runtime remains separate from this app.
+2. [ ] **Local conversation bridge:** review [the design proposal](docs/agent-design.md), then implement tool instructions, stable Codex routing, durable turn/delivery recovery, and event-safe feedback with fake runtime/messaging clients. Ordinary owner messages currently echo; Maritime remains separate.
+3. [ ] **Connect external services later:** owner Cloudflare account, CLI authorization, real database/configuration, remote migrations/secrets, verified data transfer/read/write; Reddit OAuth/watchlist and one authenticated post read. See [the checklist](docs/connect-cloudflare.md); remote setup and live OAuth verification have not run.
+4. [ ] **Complete monitoring and alerts:** add pagination/catch-up, verify real grading/CPU usage, review saved feedback, and implement notification reconciliation. Activate the prepared schedule/report sender after remote setup and delivery checks pass.
+5. [ ] **Connect hosted chat and outreach:** verify Photon ingress/VM wake-up, model access, session continuation, and completion delivery; wire the app to Maritime. Add owner-reviewed drafts later. No runtime integration or automatic outreach is active.
 
 See [the architecture guide](docs/architecture.md) for the running components and ownership boundaries.
