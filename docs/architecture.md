@@ -1,10 +1,12 @@
 # How the lead agent works
 
 The current working slice is a **local D1 CRM**, an authenticated Worker API,
-TypeScript shell tools, manual Jev grading, and deterministic feedback handling.
+TypeScript shell tools, manual Jev grading, deterministic feedback handling, and
+a shared scan function with manual/scheduled triggers.
 No Cloudflare account is required to run it. No remote D1 database has been
-configured or tested. Reddit fetching, timers, outreach, and hosted application
-integration remain pending.
+configured or tested. Scanning runs locally with offline fixtures; the OAuth
+adapter is implemented but live Reddit/Jev access, hosted timers, outreach, and
+application integration remain pending.
 
 ## Current components
 
@@ -53,7 +55,9 @@ feedback, and prior submission markers survive upserts.
 it copies existing grades, legacy feedback notes, and submission links without
 deleting old columns/records. A legacy note with no verdict is tagged `legacy`
 and dated when it is migrated, because its original feedback date is unknown.
-Existing `runs`/`run_lock` scaffold tables remain unused; no scheduler runs.
+`runs` and `run_lock` now track scan execution and prevent overlap.
+`0003_scans.sql` adds persistent scan rotation/cooldown state and a unique report
+fingerprint so identical pending previews are reused. No hosted scheduler runs.
 
 The separate SQLite importer reads the old Bun database without modifying it.
 It never overwrites an existing D1 lead. Old reports have no trustworthy item
@@ -82,6 +86,69 @@ leads are excluded from future alerts; an edited source does not reset that
 marker. Dismissed/contacted leads remain excluded even if their source changes.
 `get_lead` exposes feedback for later grading review; the grader currently does
 not consume it or train on it automatically.
+
+## Scheduled and manual scans
+
+The Worker now exposes authenticated `POST /api/run_scan` and a `scheduled()`
+handler. Both invoke `runScan` in `src/scan.ts`, use the same D1 state, and never
+send messages. The configured 30-minute cron is deployment groundwork only:
+`SCAN_ENABLED=false` is the default and no Cloudflare account is connected.
+The local runner can simulate a scheduled event; it does not run a timer.
+
+1. Check explicit source/watchlist configuration and acquire a 180-second D1 lease.
+2. Fetch one bounded page from the next subreddit, or read the offline fixture.
+3. Reuse current grades; classify changed/new posts and save each successful result.
+4. Save/reuse a report preview containing this poll's eligible leads.
+5. Persist run outcome and source rotation, then release the lease.
+
+Normal local development disables scanning. `crm:dev --scan-demo` enables fixture
+scans in the separate `data/scan-demo-d1` store, with no model/messaging/Reddit
+credentials. See the [scan demo commands](../README.md#scheduled-and-manual-scan-groundwork).
+
+The OAuth adapter requests an app-only token and uses Reddit's read-only `/new`
+listing. It polls at most five posts from one subreddit per run. This is the
+first bounded slice; high-volume communities need pagination/catch-up before
+this becomes comprehensive monitoring. Rate-limit responses/header cooldowns
+are saved in D1 rather than retried in a loop. Successful prior grades remain
+saved if a later grade or report write fails. A hard termination can leave a
+`running` history row until someone reviews it, but the lease expires.
+
+The 15-test suite and additional D1 checks verify fake OAuth transport,
+manual/scheduled parity, grade/report reuse, authentication, disabled defaults,
+lease/cooldown behavior, failure recovery, feedback suppression, and persistence.
+They do not verify live provider access or Cloudflare Free's CPU budget.
+
+## Target architecture and where the diagram's boxes belong
+
+```mermaid
+flowchart LR
+  Owner["You"] --> Photon["Photon: messaging transport"]
+  subgraph VM["Maritime VM — connection still pending"]
+    Agent["Application + Codex"]
+    Sender["Report sender — still pending"]
+  end
+  Photon --> Agent
+  subgraph CF["Cloudflare Worker — currently local"]
+    API["Authenticated CRM API"]
+    Scanner["Shared scan function"]
+  end
+  Agent -->|"lead tools"| API
+  Cron["Cron trigger or manual API"] --> Scanner
+  Reddit["External Reddit API"] -->|"posts"| Scanner
+  Scanner -->|"HTTPS grading request"| Jev["External Jev service"]
+  Jev -->|"classification"| Scanner
+  API --> D1[("D1 CRM")]
+  Scanner --> D1
+  D1 -.->|"pending reports"| Sender
+  Sender -.-> Photon
+```
+
+Photon is the transport; the application/Codex process belongs in the VM.
+Reddit and Jev are external services called by the scanner, rather than services
+we host inside Cloudflare. VM tools use our authenticated CRM API, rather than
+Cloudflare management credentials. A report sender still needs to connect stored
+previews to Photon; saving to D1 does not itself deliver a notification. The
+existing Bun sender has not been deployed or wired to drain scheduled previews.
 
 ## Feedback path
 
@@ -155,11 +222,19 @@ No Maritime state was inspected or changed during this slice. Historical Photon
 phone tests do not establish current live delivery after this change.
 
 Local CRM access needs the Worker process running. With the laptop off, this
-application has no running API, receiver, grader, or monitor. Remote D1 and
+application has no running API, receiver, grader, or scanner. Remote D1 and
 Cloudflare account access are pending; see [Connect Cloudflare later](connect-cloudflare.md).
 
-Next work remains bounded: establish Reddit access, connect the future database
-account, review grading against stored feedback, add scanning/scheduling, and
+Next work remains bounded: verify live Reddit access, connect the future database
+account, review grading against stored feedback, complete pagination/monitoring, activate the prepared schedule, and
 later implement owner-reviewed outreach and hosting integration. The
-[README roadmap](../README.md#roadmap) tracks those actions. No cron, cloud
+[README roadmap](../README.md#roadmap) tracks those actions. No hosted cron, cloud
 signup, deployment, provisioning, or paid model call was performed here.
+
+## Public examples of similar systems
+
+- [RedSignal](https://github.com/ivucicev/redsignal): open-source subreddit monitoring, optional AI filtering, lead tracking, and reply drafts.
+- [F5Bot + n8n build notes](https://www.reddit.com/r/n8n_ai_agents/comments/1tgqevd/i_built_a_simple_online_lead_generation_engine/): the author's workflow turns keyword-alert emails into AI-qualified Telegram alerts.
+- [How I Use Syften to Grow Syften](https://syften.com/blog/social-listening-use-cases/): a founder's notes on monitoring conversations to find customers.
+
+These are references for the pattern; their implementations/results were not audited.

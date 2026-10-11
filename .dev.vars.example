@@ -1,3 +1,12 @@
-# Placeholder Worker configuration only. The local CRM runner does not load this file.
+# Placeholder Worker configuration only. The local runner does not load this file.
 CRM_API_TOKEN=replace-with-a-unique-application-token
 NOTIFY_ENABLED=false
+SCAN_ENABLED=false
+SCAN_SOURCE=reddit
+SCAN_SUBREDDITS=
+# Live scanner bindings, configure later; no credentials are needed for --scan-demo.
+REDDIT_CLIENT_ID=replace-later
+REDDIT_CLIENT_SECRET=replace-later
+REDDIT_USER_AGENT=photon-reddit-agent/0.0.1-by-your-reddit-username
+JEV_API_KEY=replace-later
+JEV_MODEL=jev-latest

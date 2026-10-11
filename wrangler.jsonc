@@ -12,6 +12,8 @@
     "database_id": "00000000-0000-0000-0000-000000000000",
     "migrations_dir": "migrations"
   }],
-  "vars": { "NOTIFY_ENABLED": "false", "JEV_MODEL": "jev-latest" },
+  // Groundwork only: this schedule is inactive until an explicitly authorized deployment.
+  "triggers": { "crons": ["*/30 * * * *"] },
+  "vars": { "NOTIFY_ENABLED": "false", "SCAN_ENABLED": "false", "SCAN_SOURCE": "reddit", "SCAN_SUBREDDITS": "", "JEV_MODEL": "jev-latest" },
   "observability": { "enabled": true }
 }

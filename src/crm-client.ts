@@ -1,5 +1,6 @@
 import type { CrmLead, Feedback, FeedbackEvent, FeedbackResponse, LeadStatus, Submission } from "./crm-types.ts";
 import type { SavedLead } from "./lead-utils.ts";
+import type { ScanSummary } from "./scan.ts";
 
 export class CrmError extends Error {
   constructor(public status: number, message: string) { super(message); }
@@ -15,7 +16,7 @@ export class CrmClient {
   async call<T>(operation: string, args: object = {}): Promise<T> {
     const response = await fetch(new URL(`/api/${operation}`, this.url), {
       method: "POST", headers: { Authorization: `Bearer ${this.token}`, "Content-Type": "application/json" },
-      body: JSON.stringify(args), signal: AbortSignal.timeout(30_000), redirect: "error",
+      body: JSON.stringify(args), signal: AbortSignal.timeout(operation === "run_scan" ? 180_000 : 30_000), redirect: "error",
     });
     const body = await response.json() as { error?: string } & T;
     if (!response.ok) throw new CrmError(response.status, body.error || `CRM HTTP ${response.status}`);
@@ -31,5 +32,7 @@ export class CrmClient {
   processFeedback(event: FeedbackEvent) { return this.call<FeedbackResponse>("process_feedback", event); }
   createReport(ids: string[], demo = false) { return this.call<{ id: string; body: string }>("create_report", { ids, demo }); }
   recordSubmission(reportId: string, submission: Submission) { return this.call("record_submission", { reportId, ...submission }); }
-  getConfig() { return this.call<{ notificationsEnabled: boolean }>("get_config"); }
+  getConfig() { return this.call<{ notificationsEnabled: boolean; scansEnabled: boolean; scanSource: string }>("get_config"); }
+  runScan() { return this.call<ScanSummary>("run_scan"); }
+  listScanRuns() { return this.call<{ runs: { id: string; status: string; summary: ScanSummary | { error: string } }[] }>("list_scan_runs"); }
 }

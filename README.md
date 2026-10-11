@@ -30,6 +30,77 @@ feedback history entry. Run `process_feedback` again: `duplicate: true` and stil
 one history entry. Restart `crm:dev` and repeat `get_lead`: the record remains.
 These fixtures make **zero model calls and send zero messages**. The source URL is invented.
 
+## Scheduled and manual scan groundwork
+
+Both triggers call the same Worker scan function. No Cloudflare account is needed
+for this offline demo. Stop any existing local CRM process before starting it:
+
+```sh
+export CRM_API_TOKEN='local-example-token-change-me'
+bun --no-env-file run crm:dev --scan-demo
+```
+
+In a second terminal:
+
+```sh
+export CRM_API_TOKEN='local-example-token-change-me'
+export CRM_URL='http://127.0.0.1:8787'
+bun --no-env-file run crm run_scan
+bun --no-env-file run crm list_scan_runs
+# Simulate Cloudflare's scheduled event locally; this is not a running timer:
+curl 'http://127.0.0.1:8787/cdn-cgi/local/scheduled?cron=*/30%20*%20*%20*%20*'
+```
+
+Expect `source: fixture`, one saved synthetic lead, and a DEMO report preview.
+Repeat `run_scan`: the grade and pending report are reused. `list_scan_runs`
+shows separate manual/scheduled runs and their outcomes. This demo uses the
+separate persistent store `data/scan-demo-d1`, rather than mixing synthetic
+scanner records into the regular `data/d1` CRM. Both source selection and
+credentials are server configuration, never supplied in scan tool arguments.
+No Reddit request, model call, Photon send, or hosted schedule runs in demo mode.
+
+The normal `crm:dev` command keeps scans disabled. `POST /api/run_scan` accepts
+only `{}` and requires the same CRM bearer authentication. `list_scan_runs`
+returns the latest ten executions (API `limit` can be 1–100). Runs record source,
+subreddit, trigger, counts, report preview, timestamps, and success/failure.
+An expiring D1 lease prevents manual and scheduled jobs from overlapping;
+Reddit rate-limit cooldowns survive restarts. A failed run keeps already saved
+grades, releases its lease, and can be retried. A hard runtime termination can
+leave a `running` history entry; its lease expires after 180 seconds.
+
+`wrangler.jsonc` declares `*/30 * * * *`, but **nothing is deployed or scheduled**.
+The `scheduled()` handler is a no-op while `SCAN_ENABLED=false`. It reads the
+same configuration and runs the same code as the manual API when enabled.
+Scheduled invocations skip active leases/cooldowns; manual calls return 409/429.
+
+The live adapter groundwork uses read-only Reddit app-only OAuth
+(`client_credentials` for a confidential script/web client). It requests
+`/r/<subreddit>/new?limit=5`, validates source posts, and reuses the existing Jev
+rubric/thresholds. One subreddit is checked per run; up to five configured
+subreddits rotate after successful runs. With three subreddits and a 30-minute
+trigger, each is checked every 90 minutes. This is a bounded polling scaffold,
+not an exhaustive crawler: posts beyond the latest five may be missed.
+`moreAvailable` reports whether Reddit has older listing pages; pagination and
+catch-up cursors remain later work. Saved reports include only eligible posts
+from that poll; dismissed/contacted/submitted leads are suppressed.
+
+Future live Worker configuration (not exercised in this slice):
+
+| Binding | Purpose |
+|---|---|
+| `SCAN_ENABLED=true`, `SCAN_SOURCE=reddit` | Explicitly enable external scanning |
+| `SCAN_SUBREDDITS=community_one,community_two` | 1–5 subreddit names, no URLs |
+| `REDDIT_CLIENT_ID`, `REDDIT_CLIENT_SECRET` | App-only OAuth credentials, stored as Worker secrets |
+| `REDDIT_USER_AGENT` | Descriptive client/version/owner string |
+| `JEV_API_KEY`, optional `JEV_MODEL` | Existing grading service credentials/model |
+
+OAuth tokens are obtained afresh per live scan. The adapter stops on HTTP 429,
+persists Retry-After cooldowns, respects exhausted quota headers, bounds upstream
+response sizes, and refuses redirects. It has been tested with fake HTTP
+responses only. Live OAuth eligibility, provider quotas, and Cloudflare CPU
+usage are pending verification. The scanner saves previews and never sends
+notifications; a hosted report sender/reconciliation path is still separate work.
+
 ## Agent tools
 
 Codex uses these through its existing shell tools. Set `CRM_URL` and
@@ -170,20 +241,19 @@ bun --no-env-file run test:d1
 ```
 
 `test:d1` builds the actual Worker, uses Miniflare/workerd's local D1 with isolated
-credentials, runs **11 tests / 106 assertions**, and performs additional restart
-and legacy-migration assertions. It covers authentication, invalid/bounded
+credentials, runs **15 tests / 145 assertions**, and performs additional restart, legacy-migration, and manual/scheduled scan assertions. It covers authentication, invalid/bounded
 requests, preserving grades, append-only feedback, report-item resolution,
 concurrent/replayed inbound events, outgoing-event filtering, read-only SQLite
 import, failed sends, and retaining candidates beyond five. Plain `bun test`
 runs unit tests and explicitly skips cases requiring that D1 runtime.
-No test sends a real iMessage or invokes a paid model.
+No test calls live Reddit, sends a real iMessage, or invokes a paid model.
 
 ## Roadmap
 
-1. [x] **Local mini CRM:** D1 schema/migrations, authenticated Worker API, shell tools, explicit legacy import, manual-batch integration, and tested feedback loop.
+1. [x] **Local CRM and scan groundwork:** shared scheduled/manual scan function, offline demo, bounded OAuth adapter, run history/leases/cooldowns; D1 schema/migrations, authenticated Worker API, shell tools, explicit legacy import, manual-batch integration, and tested feedback loop.
 2. [ ] **Connect Cloudflare later:** owner account, CLI authorization, real database/configuration, remote migrations/secrets, and verified remote read/write. See [the checklist](docs/connect-cloudflare.md); none has run.
-3. [ ] **Reddit access:** confirm the permitted access route and verify one authorized post read before implementing fetching or choosing a watchlist.
-4. [ ] **Scanning and grading quality:** add fetching/scheduling after access works; use saved feedback to review rubric quality without assuming automatic training.
+3. [ ] **Live Reddit access:** configure OAuth and a watchlist; verify one authenticated post read and its limits. The adapter is implemented and tested with fixtures.
+4. [ ] **Complete monitoring:** add pagination/catch-up for busy communities, verify real grading/CPU usage, and review saved feedback. Activate the prepared schedule only after remote setup works.
 5. [ ] **Outreach and continuous operation:** owner-reviewed drafts, notification reconciliation, and deployment/runtime integration. Maritime's Codex runtime remains separate from this app.
 
 See [the architecture guide](docs/architecture.md) for the running components and ownership boundaries.

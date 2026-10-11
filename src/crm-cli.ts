@@ -3,8 +3,14 @@ import { STATUSES, type FeedbackEvent, type FeedbackVerdict, type LeadStatus } f
 
 export async function runCrmCli(argv: string[], client = new CrmClient()): Promise<unknown> {
   const [command, ...args] = argv;
-  const usage = "Usage: crm list_leads [status|all|alerts] [offset] [limit] | get_lead <id> | set_lead_status <id> <new|useful|dismissed|contacted> | record_feedback <id> <useful|dismissed|contacted> <reason> | upsert_leads <graded.json> | process_feedback <event.json>";
+  const usage = "Usage: crm run_scan | list_scan_runs | list_leads [status|all|alerts] [offset] [limit] | get_lead <id> | set_lead_status <id> <new|useful|dismissed|contacted> | record_feedback <id> <useful|dismissed|contacted> <reason> | upsert_leads <graded.json> | process_feedback <event.json>";
   switch (command) {
+    case "run_scan":
+      if (args.length) throw new Error(usage);
+      return client.runScan();
+    case "list_scan_runs":
+      if (args.length) throw new Error(usage);
+      return client.listScanRuns();
     case "list_leads":
       if (args.length > 3 || (args[0] && ![...STATUSES, "all", "alerts"].includes(args[0]))) throw new Error(usage);
       if (args.slice(1).some(arg => !/^\d+$/.test(arg))) throw new Error(usage);

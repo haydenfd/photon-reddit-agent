@@ -1,10 +1,12 @@
-import type { D1Database, D1PreparedStatement } from "@cloudflare/workers-types";
+import type { D1Database, D1PreparedStatement, ScheduledController } from "@cloudflare/workers-types";
 import { parsePosts, TOPICS, TIMINGS, type Classification } from "./jev.ts";
 import { formatReport, leadId, type SavedLead } from "./lead-utils.ts";
 import { STATUSES, type CrmLead, type FeedbackResponse, type LeadStatus } from "./crm-types.ts";
 import { parseFeedback } from "./feedback.ts";
+import { runScan, type ScanEnv } from "./scan.ts";
+import { ScanError } from "./reddit.ts";
 
-type Env = { DB: D1Database; CRM_API_TOKEN: string; NOTIFY_ENABLED?: string };
+type Env = ScanEnv & { CRM_API_TOKEN: string; NOTIFY_ENABLED?: string };
 type Row = { id: string; post: string; result: string | null; status: LeadStatus; created_at: string; updated_at: string | null; submitted_at: string | null; message_id: string | null };
 class ApiError extends Error { constructor(message: string, public status = 400) { super(message); } }
 function object(value: unknown): Record<string, unknown> {
@@ -63,7 +65,17 @@ async function operation(name: string, args: Record<string, unknown>, env: Env):
   const db = env.DB;
   if (name === "get_config") {
     fields(args, []);
-    return { notificationsEnabled: env.NOTIFY_ENABLED === "true" };
+    return { notificationsEnabled: env.NOTIFY_ENABLED === "true", scansEnabled: env.SCAN_ENABLED === "true", scanSource: env.SCAN_SOURCE || "reddit" };
+  }
+  if (name === "run_scan") {
+    fields(args, []);
+    return runScan(env, "manual", (operationName, operationArgs) => operation(operationName, operationArgs, env));
+  }
+  if (name === "list_scan_runs") {
+    fields(args, ["limit"]);
+    const limit = integer(args.limit, "limit", 1, 100, 10);
+    const { results } = await db.prepare("SELECT * FROM runs ORDER BY started_at DESC, id DESC LIMIT ?").bind(limit).all<{ summary: string | null }>();
+    return { runs: results.map(row => ({ ...row, summary: row.summary ? JSON.parse(row.summary) : null })) };
   }
   if (name === "upsert_leads" || name === "import_legacy") {
     fields(args, ["leads"]);
@@ -111,12 +123,17 @@ async function operation(name: string, args: Record<string, unknown>, env: Env):
     return { ids: rows.map(row => row.id) };
   }
   if (name === "list_leads") {
-    fields(args, ["status", "alertsOnly", "limit", "offset"]);
+    fields(args, ["status", "alertsOnly", "limit", "offset", "ids"]);
     const limit = integer(args.limit, "limit", 1, 100, 25), offset = integer(args.offset, "offset", 0, 100_000, 0);
     if (args.alertsOnly !== undefined && typeof args.alertsOnly !== "boolean") throw new ApiError("alertsOnly must be boolean.");
     const filters: string[] = [], values: (string | number)[] = [];
     if (args.status !== undefined) { filters.push("status = ?"); values.push(status(args.status)); }
     if (args.alertsOnly) filters.push(ALERTS);
+    if (args.ids !== undefined) {
+      if (!Array.isArray(args.ids) || args.ids.length < 1 || args.ids.length > 20) throw new ApiError("ids must contain 1–20 lead IDs.");
+      const ids = args.ids.map(id => string(id, "id"));
+      filters.push(`id IN (${ids.map(() => "?").join(",")})`); values.push(...ids);
+    }
     const rows = await db.prepare(`SELECT * FROM leads ${filters.length ? `WHERE ${filters.join(" AND ")}` : ""} ORDER BY ${args.alertsOnly ? "json_extract(result, '$.score') DESC," : ""} id LIMIT ? OFFSET ?`)
       .bind(...values, limit + 1, offset).all<Row>();
     return { leads: rows.results.slice(0, limit).map(decode), nextOffset: rows.results.length > limit ? offset + limit : null };
@@ -141,7 +158,7 @@ async function operation(name: string, args: Record<string, unknown>, env: Env):
     await db.batch(statements);
     return { id, status: verdict };
   }
-  if (name === "create_report") {
+  if (name === "create_report" || name === "create_scan_report") {
     fields(args, ["ids", "demo"]);
     if (!Array.isArray(args.ids) || args.ids.length < 1 || args.ids.length > 5 || new Set(args.ids).size !== args.ids.length) throw new ApiError("Select 1–5 distinct lead IDs.");
     if (args.demo !== undefined && typeof args.demo !== "boolean") throw new ApiError("demo must be boolean.");
@@ -152,9 +169,18 @@ async function operation(name: string, args: Record<string, unknown>, env: Env):
       if (!lead.result || !["high", "urgent"].includes(lead.result.priority) || ["dismissed", "contacted"].includes(lead.status) || lead.submittedAt) throw new ApiError(`Lead is not alertable: ${id}`, 409);
       leads.push({ id, post: lead.post, result: lead.result });
     }
+    let scanKey: string | null = null;
+    if (name === "create_scan_report") {
+      const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify({ leads, demo: args.demo === true })));
+      scanKey = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
+    }
+    if (scanKey) {
+      const existing = await db.prepare("SELECT id, body FROM reports WHERE scan_key = ? AND submitted_at IS NULL").bind(scanKey).first<{ id: string; body: string }>();
+      if (existing) return existing;
+    }
     const id = crypto.randomUUID(), body = formatReport(leads, args.demo === true);
     await db.batch([
-      db.prepare("INSERT INTO reports (id, body) VALUES (?, ?)").bind(id, body),
+      db.prepare("INSERT INTO reports (id, body, scan_key) VALUES (?, ?, ?)").bind(id, body, scanKey),
       ...leads.map((lead, i) => db.prepare("INSERT INTO report_items (report_id, lead_id, item_index, snapshot) VALUES (?, ?, ?, ?)").bind(id, lead.id, i + 1, JSON.stringify(lead))),
     ]);
     return { id, body };
@@ -216,6 +242,14 @@ async function operation(name: string, args: Record<string, unknown>, env: Env):
 }
 
 export default {
+  async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
+    if (env.SCAN_ENABLED !== "true") return;
+    try { await runScan(env, "scheduled", (name, args) => operation(name, args, env)); }
+    catch (error) {
+      if (error instanceof ScanError && [409, 429].includes(error.status)) return;
+      throw error;
+    }
+  },
   async fetch(request: Request, env: Env): Promise<Response> {
     try {
       if (!env.CRM_API_TOKEN || env.CRM_API_TOKEN.length < 16) throw new ApiError("CRM authentication is not configured.", 503);
@@ -240,7 +274,7 @@ export default {
       if (!path.startsWith("/api/")) throw new ApiError("Unknown route.", 404);
       return Response.json(await operation(path.slice(5), args, env), { headers: { "Cache-Control": "no-store" } });
     } catch (e) {
-      const known = e instanceof ApiError;
+      const known = e instanceof ApiError || e instanceof ScanError;
       if (!known) console.error("CRM database operation failed.", e instanceof Error ? e.message : "Unknown database error");
       return Response.json({ error: known ? e.message : "CRM database operation failed." }, { status: known ? e.status : 500, headers: { "Cache-Control": "no-store" } });
     }
