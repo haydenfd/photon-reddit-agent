@@ -75,7 +75,7 @@ export async function runScan(env: ScanEnv, trigger: "manual" | "scheduled", ope
         .all<{ id: string; post: string; result: string | null }>();
       const existing = new Map(rows.results.map(row => [row.id, row]));
       const fresh: string[] = [], reused: string[] = [];
-      const rules = (await db.prepare("SELECT body FROM rules WHERE id = 1").first<{ body: string }>())?.body;
+      const rules = (await db.prepare("SELECT body FROM rules WHERE name = 'grading'").first<{ body: string }>())?.body;
       for (const post of posts) {
         const key = leadId(post), cached = existing.get(key);
         if (cached?.result && cached.post === JSON.stringify(post) && (JSON.parse(cached.result) as Classification).rubricVersion === RUBRIC_VERSION) { summary.reused++; reused.push(key); continue; }

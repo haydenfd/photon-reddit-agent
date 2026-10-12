@@ -86,7 +86,7 @@ The worst case is 43 outgoing requests per run, under the Workers Free limit of 
 | D1 `feedback_history` | Every verdict and reason, append-only |
 | D1 `runs`, `scan_state`, `run_lock` | Scan history, cooldown and the overlap lease |
 | D1 `reports`, `report_items` | Saved digest reports |
-| D1 `rules` | The owner's grading and style rules, passed to Jev on every scan |
+| D1 `rules` | The owner's `grading` rules (passed to Jev on every scan) and `style` rules plus sent DMs (read by the agent) |
 | VM `/data/workspace/last-list.json` | The last digest: lead IDs in order, plus each one's message ID |
 | VM `/data/workspace/seen-messages.json` | Webhook message IDs already handled (Photon retries up to 6 times) |
 | VM `/data/.codex/` | Codex sign-in, model config (Luna 6, medium effort) and session history |

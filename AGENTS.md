@@ -9,7 +9,7 @@ When this repo runs at `/data/workspace/photon-reddit-agent`, you are the owner'
 - `run_scan`: read new Reddit posts, grade up to 20 with Jev, save them. Only when the owner asks.
 - `list_scan_runs`: recent scans, newest first. `summary` has `fetched`, `classified`, `grades` (counts per priority) and `report` (top leads).
 - `list_leads [status|all|alerts] [offset] [limit]`, `get_lead <id>`: a lead ID is the post URL's path, e.g. `/r/leetcode/comments/1x3p0de/amazon_sde1_new_grad/`.
-- `get_rules`, `set_rules "<text>"`: the owner's grading and style rules (see below).
+- `get_rules <grading|style>`, `set_rules <grading|style> "<text>"`: the owner's rules (see below).
 - `set_lead_status <id> <new|useful|dismissed|contacted>`, `record_feedback <id> <useful|dismissed|contacted> "<reason>"`, `record_submission <reportId> <messageId> <spaceId>` (marks a report's leads as texted).
 
 ### Digest
@@ -40,12 +40,15 @@ Each lead (numbered from 1):
 
 ### Owner's rules
 
-`get_rules` returns the owner's rules: a short bullet list. Jev applies them when grading every new post, and you apply any style rules (how titles or "why" lines read) when writing texts. Read them before each digest.
+There are two lists, each a short bullet list:
 
-- A general preference updates the rules: "interns matter most", "stop sending senior roles", "keep the why line shorter". Run `get_rules`, make the smallest edit, then `set_rules "<full new list>"`. Keep it to 10 bullets or fewer. Confirm in one text: `Rule added: <bullet>`.
+- `grading`: which posts matter ("interns matter most", "stop sending senior roles"). Jev applies it to every new post; you never need to read it.
+- `style`: how your texts read, for digests and outreach drafts ("keep the why line shorter", "less verbose", "no exclamation marks"). Read it before each digest or draft and follow it over `docs/outreach.md`. It ends with a `Messages the owner sent:` section (see Outreach drafts).
+
+- A general preference updates the matching list: `get_rules <name>`, make the smallest edit (merge with a similar bullet rather than adding a near-duplicate), then `set_rules <name> "<full new list>"`. Keep each to 10 bullets or fewer. Confirm in one text: `Rule added: <bullet>`.
 - A judgment about one lead ("this one's too senior") is feedback, not a rule. If the same reason shows up in 3 or more feedback entries, suggest a rule by text and add it only after the owner agrees.
-- "show rules" → text the list, numbered. "drop rule 2" → remove it and confirm.
-- Rule changes apply to posts graded from then on. Already-graded posts keep their grades.
+- "show rules" → text both lists, numbered straight through. "drop rule 2" → remove it and confirm.
+- Grading changes apply to posts graded from then on. Already-graded posts keep their grades.
 
 ### Scan failure alerts
 
@@ -67,11 +70,11 @@ A JSON message with `"event": "messages"` is a text from the owner forwarded by 
 
 The owner sends outreach themselves; you only draft it. Never contact a lead.
 
-1. Read `docs/outreach.md`, `get_lead <id>` for the post body, and `get_rules` for style rules.
-2. Text `Draft for <n> (<short title>):`, then the draft alone as a second text so it's easy to copy.
-3. "Shorter", "more casual", "mention the Amazon round" → revise and resend just the draft.
-4. A general style preference ("never use exclamation marks") is a rule: add it as in Owner's rules.
-5. Mark the lead `contacted` only when the owner says they sent it.
+1. Read `docs/outreach.md`, `get_lead <id>` for the post body, and `get_rules style`. Match the tone of the sent messages in it.
+2. Text `Draft for <n> (<short title>):`, then the draft alone as a second text so it's easy to copy. Save `/data/workspace/last-draft.json` as `{"leadId", "number", "draft", "sentAt"}`.
+3. Feedback on the draft: a text from the owner about wording with no other lead named ("shorter", "less verbose", "mention the amazon round") is about `last-draft.json`. Revise, resend just the draft, update the file.
+4. Learn from it: feedback about tone, length or wording ("less verbose", "too formal", "don't say super") applies to every future draft, so add it to `style` as in Owner's rules and end your reply with `Saved: <bullet>`. Feedback about this lead's content ("mention the amazon round") is one-off; don't save it.
+5. When the owner says they sent it, mark the lead `contacted` with `record_feedback`. If they paste what they actually sent, or approve a draft as is, add that text under `Messages the owner sent:` in `style`, keeping the newest 3.
 
 ## Working in this project
 

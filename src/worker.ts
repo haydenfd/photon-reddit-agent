@@ -30,6 +30,10 @@ function integer(value: unknown, name: string, min: number, max: number, fallbac
   if (typeof value !== "number" || !Number.isInteger(value) || value < min || value > max) throw new ApiError(`${name} must be an integer from ${min} to ${max}.`);
   return value;
 }
+function ruleSet(value: unknown) {
+  if (value !== "grading" && value !== "style") throw new ApiError("name must be grading or style.");
+  return value;
+}
 function status(value: unknown, feedback = false): LeadStatus {
   if (!STATUSES.includes(value as LeadStatus) || (feedback && value === "new")) throw new ApiError("Invalid lead status/verdict.");
   return value as LeadStatus;
@@ -72,14 +76,14 @@ async function operation(name: string, args: Record<string, unknown>, env: Env):
     return runScan(env, "manual", (operationName, operationArgs) => operation(operationName, operationArgs, env));
   }
   if (name === "get_rules") {
-    fields(args, []);
-    return await db.prepare("SELECT body, updated_at FROM rules WHERE id = 1").first() ?? { body: "", updated_at: null };
+    fields(args, ["name"]);
+    return await db.prepare("SELECT body, updated_at FROM rules WHERE name = ?").bind(ruleSet(args.name)).first() ?? { body: "", updated_at: null };
   }
   if (name === "set_rules") {
-    // The owner's grading and style rules: Jev reads them on every scan, the agent when writing texts.
-    fields(args, ["body"]);
-    const body = string(args.body, "body", 2000, true);
-    await db.prepare(`INSERT INTO rules (id, body, updated_at) VALUES (1, ?, ${NOW}) ON CONFLICT(id) DO UPDATE SET body = excluded.body, updated_at = excluded.updated_at`).bind(body).run();
+    // grading: Jev reads it on every scan. style: the agent reads it when writing digests and outreach drafts.
+    fields(args, ["name", "body"]);
+    const body = string(args.body, "body", 4000, true);
+    await db.prepare(`INSERT INTO rules (name, body, updated_at) VALUES (?, ?, ${NOW}) ON CONFLICT(name) DO UPDATE SET body = excluded.body, updated_at = excluded.updated_at`).bind(ruleSet(args.name), body).run();
     return { body };
   }
   if (name === "list_scan_runs") {

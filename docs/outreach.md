@@ -2,6 +2,8 @@
 
 How the agent drafts a Reddit DM to a lead when the owner asks. The owner sends it themselves; the agent never contacts leads.
 
+This is the starting point. The owner's `style` rules (`get_rules style`) override it and grow from feedback on drafts, along with the last 3 messages the owner actually sent.
+
 ## What AlgoVox is (the one line to use)
 
 A voice-driven mock technical interviewer for LeetCode-style interviews. The why: grinding LeetCode alone doesn't prepare you to talk through a problem live.

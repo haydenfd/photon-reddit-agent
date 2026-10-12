@@ -58,9 +58,10 @@ try {
   const repeatScan = await (await request(mf, "run_scan")).json();
   assert.equal(repeatScan.classified, 0); assert.equal(repeatScan.reused, 1);
   assert.equal(repeatScan.report.id, firstScan.report.id, "identical pending reports are reused");
-  assert.match((await (await request(mf, "get_rules")).json()).body, /Interns, new grads/, "migration seeds the owner's rules");
-  await request(mf, "set_rules", { body: "- Prefer interns." });
-  assert.equal((await (await request(mf, "get_rules")).json()).body, "- Prefer interns.");
+  assert.match((await (await request(mf, "get_rules", { name: "grading" })).json()).body, /Interns, new grads/, "migration seeds the owner's rules");
+  await request(mf, "set_rules", { name: "style", body: "- Keep drafts short." });
+  assert.equal((await (await request(mf, "get_rules", { name: "style" })).json()).body, "- Keep drafts short.");
+  assert.match((await (await request(mf, "get_rules", { name: "grading" })).json()).body, /Interns/, "style rules don't touch grading");
   const scheduled = await mf.dispatchFetch("http://localhost/cdn-cgi/local/scheduled?cron=*/30%20*%20*%20*%20*");
   assert.equal(scheduled.status, 200);
   const scheduledRuns = await (await request(mf, "list_scan_runs")).json();

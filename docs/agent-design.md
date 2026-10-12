@@ -46,10 +46,10 @@ Photon retries a webhook up to 6 times. `src/inbound.ts` keeps the last 200 hand
 
 ## Learning from feedback
 
-The owner's preferences live in one short rules list in D1 (`get_rules` / `set_rules`), seeded with "interns, new grads, entry-level and junior first; SDE2 and senior score 2 or lower". In a test, that took a Palo Alto SDE2 post from urgent (3.98) to review (2.01) and left an IBM intern post at high.
+The owner's preferences live in two short rule lists in D1 (`get_rules` / `set_rules`). `grading` is seeded with "interns, new grads, entry-level and junior first; SDE2 and senior score 2 or lower". In a test, that took a Palo Alto SDE2 post from urgent (3.98) to review (2.01) and left an IBM intern post at high.
 
 - Jev gets the rules in its priority instructions on every scan, so they apply to posts it has never seen. Rules describe kinds of posts, not specific posts.
 - Codex edits the rules when you state a general preference, and suggests one when the same feedback reason keeps recurring.
-- Outreach style follows the same path: Codex drafts DMs from [`outreach.md`](outreach.md) plus any style rules, and "never use exclamation marks" becomes a rule.
+- `style` holds how texts and DMs read. Codex drafts DMs from [`outreach.md`](outreach.md) plus this list. Feedback on a draft's tone or length ("less verbose", "too formal") becomes a bullet, and the last 3 messages you actually sent are kept as examples, so each draft sounds more like you. Jev never sees this list, so writing style can't shift grades.
 - The list stays visible and editable: text "show rules" or "drop rule 2".
 - Bumping `RUBRIC_VERSION` in `src/jev.ts` regrades saved posts, up to 20 per run.
