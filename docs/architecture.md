@@ -31,7 +31,7 @@ The Worker never talks to iMessage, and the agent never talks to Reddit. They on
 
 | Flow | Status |
 |---|---|
-| Scheduled scans | Paused (`SCHEDULED_SCANS=false`). A cron was still firing every 30 min despite `crons: []` (to investigate) |
+| Scheduled scans | Paused (`SCHEDULED_SCANS=false`). Cloudflare still has a stale `*/30 * * * *` trigger despite `crons: []`; it fires, and the Worker ignores it. Remove it in the dashboard: Worker → Settings → Triggers |
 | Manual scan + digest | Live. Ask the agent and it scans, then sends one header text plus one text per lead |
 | Failure alerts | Live. A failed scheduled scan texts you once per failure streak |
 | Replies and tapbacks | Built, not connected. Needs the Photon webhook pointed at the Maritime wake URL |
@@ -120,6 +120,6 @@ maritime exec photon-reddit-agent -- cat /data/workspace/last-list.json
 ## Known limits
 
 - Sending a text and recording it aren't atomic, so a crash between the two could repeat a text.
-- Reddit sometimes blocks Cloudflare IPs (403). Retries and the next run cover it.
+- Reddit sometimes blocks Cloudflare IPs (403). Retries and the next run cover it. On 2026-10-12, every cron run from 06:00 to 07:30 UTC got a 403 or 429 while manual runs in between succeeded. Likely cause: cron runs execute in a different Cloudflare location with worse-reputation IPs. Check before relying on the cron.
 - If Jev is slow on every call, a run can outlast its 3-minute lease.
 - Migrations in `migrations/` are additive. Never edit one that has already been applied.
