@@ -34,7 +34,7 @@ The Worker never talks to iMessage, and the agent never talks to Reddit. They on
 | Scheduled scans | Paused (`SCHEDULED_SCANS=false`). Cloudflare still has a stale `*/30 * * * *` trigger despite `crons: []`; it fires, and the Worker ignores it. Remove it in the dashboard: Worker → Settings → Triggers |
 | Manual scan + digest | Live. Ask the agent and it scans, then sends one header text plus one text per lead |
 | Failure alerts | Live. A failed scheduled scan texts you once per failure streak |
-| Replies and tapbacks | Built, not connected. Needs the Photon webhook pointed at the Maritime wake URL |
+| Replies and tapbacks | Built, not connected. Needs the Photon webhook pointed at the Maritime wake URL, including its `?token=` |
 | Automatic digest after each scan | Built, not deployed. A scheduled scan with new leads wakes the agent (not during quiet hours, 11 PM–8 AM) |
 
 ## The four flows
@@ -114,7 +114,7 @@ maritime exec photon-reddit-agent -- cat /data/workspace/last-list.json
 
 - The CRM API requires a bearer token (16+ characters). Inputs are validated and SQL is parameterized.
 - Reddit text is untrusted. Jev and Codex are both told never to follow instructions found in posts.
-- The Maritime wake URL has no auth, so the agent never trusts a webhook body directly. Replies are re-fetched from Photon, and failure alerts are checked against `list_scan_runs`.
+- The Maritime wake URL needs a token (`?token=`, kept in Worker secrets, never committed). The agent still never trusts a webhook body directly. Replies are re-fetched from Photon, and failure alerts are checked against `list_scan_runs`.
 - Only messages from `OWNER_PHONE` are acted on.
 
 ## Known limits

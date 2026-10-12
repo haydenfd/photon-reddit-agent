@@ -15,7 +15,7 @@ Copy the printed `database_id` into `wrangler.jsonc`, then:
 bunx wrangler d1 migrations apply reddit-tracker --remote
 bunx wrangler secret put CRM_API_TOKEN          # random string, 16+ chars; the agent uses the same one
 bunx wrangler secret put JEV_API_KEY
-bunx wrangler secret put MARITIME_WEBHOOK_URL   # optional: enables failure alerts
+bunx wrangler secret put MARITIME_WEBHOOK_URL   # optional: the agent's invoke URL with ?token= (GET /api/webhooks/<agent>/token)
 bunx wrangler deploy
 ```
 
