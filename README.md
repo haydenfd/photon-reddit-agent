@@ -19,6 +19,8 @@ your iPhone ◀── Photon (iMessage) ◀── Codex on a Maritime VM ◀─�
 
 Codex follows [`AGENTS.md`](AGENTS.md), which covers the digest format, reply handling and alert rules.
 
+More detail: [architecture](docs/architecture.md) (flows, state, how to check on it) · [agent design](docs/agent-design.md) · [deploying the Worker](docs/connect-cloudflare.md).
+
 ## Setup
 
 You need Bun, plus accounts on Cloudflare, Jev, Photon and Maritime (all have free tiers).

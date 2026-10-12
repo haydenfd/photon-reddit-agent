@@ -1,263 +1,123 @@
-# How the lead agent works
+# Architecture
 
-The current working slice is a **local D1 CRM**, an authenticated Worker API,
-TypeScript shell tools, manual Jev grading, deterministic feedback handling, and
-a shared scan function with manual/scheduled triggers.
-No Cloudflare account is required to run it. No remote D1 database has been
-configured or tested. Scanning runs locally with offline fixtures; the OAuth
-adapter is implemented but live Reddit/Jev access, hosted timers, outreach, and
-application integration remain pending.
+## The big picture
 
-For the proposed Photon -> Codex conversation bridge, tool exposure, session
-resumption, persistence/retry behavior, and a read-only Claude review prompt,
-see [the agent design proposal](agent-design.md). It separates implemented code
-from proposed changes and unverified provider behavior.
-
-## Current components
-
-```mermaid
-flowchart LR
-  CODEX["Codex shell tools"] --> CLI["crm CLI"]
-  POSTS["Supplied post JSON"] --> BATCH["Manual batch command"]
-  BATCH -->|"only when a grade is missing/stale"| JEV["Existing Jev grader"]
-  CLI -->|"authenticated JSON"| API["Worker API on localhost"]
-  BATCH --> API
-  API --> D1[("Local D1: data/d1")]
-  SQLITE[("Legacy SQLite backup")] -->|"explicit read-only import"| API
+```
+                 ┌──────────────── Cloudflare ────────────────┐
+ Reddit RSS ───▶ │ Worker (cron or crm run_scan)               │
+                 │   fetch → grade with Jev → save to D1       │
+                 │   CRM API: /api/<operation> (bearer token)  │
+                 └──────┬───────────────────────▲──────────────┘
+          scan failed?  │ wake URL              │ CRM CLI (list_scan_runs, get_lead, record_feedback…)
+                        ▼                       │
+                 ┌──────────────── Maritime VM ────────────────┐
+ Photon webhook ▶│ Codex (follows AGENTS.md)                   │
+ (your replies)  │   writes digests, reads replies, updates    │
+                 │   leads, texts you via src/send-message.ts  │
+                 └──────┬──────────────────────────────────────┘
+                        ▼
+                     Photon ───▶ iMessage on your phone
 ```
 
-[`scripts/local-crm.mjs`](../scripts/local-crm.mjs) bundles the Worker, starts
-Miniflare/workerd on loopback, and applies numbered SQL migrations. The installed
-Miniflare version uses `resourcePersistencePath`; this is explicitly configured
-and verified across a runtime restart. Local runs do not load credential files,
-contact Spectrum, or enable notifications. Wrangler's D1 configuration is a
-placeholder for later remote setup, not a second running database.
+| Piece | Runs on | Job |
+|---|---|---|
+| **Scanner + CRM** | Cloudflare Worker + D1 | Read Reddit, grade posts, store leads, runs and feedback |
+| **Agent** | Codex on a Maritime VM (sleeps when idle) | Write digests, interpret replies, update leads, send texts |
+| **Messaging** | Photon | Deliver iMessages and forward replies as webhooks |
 
-**D1 owns application state.** Every regular batch and CRM mutation goes through
-this Worker. SQLite is only a migration source; no code continues writing it.
-Do not start a separate Wrangler development store and assume it is the same
-CRM. `CRM_URL` selects the authoritative API for every client. A future remote
-switch requires transferring and verifying data, not merely changing a URL.
+The Worker never talks to iMessage, and the agent never talks to Reddit. They only meet at the CRM API.
 
-## Records and preservation
+## What's live
 
-| Record | What it preserves |
+| Flow | Status |
 |---|---|
-| `leads` and `lead_revisions` | Stable identity, source post/URL, current grade, earlier distinct post/grade versions, rubric/model versions, current status and submission markers |
-| `feedback_history` | Dated verdict/reason, optional inbound event ID; previous feedback remains intact |
-| `reports` and `report_items` | Report body, ordered item-to-lead links, immutable post/grade snapshots |
-| `notification_submissions` | Platform/message-to-report links, conversation ID and submission time |
-| `inbox` | Inbound event identity, original normalized payload, saved processing response for replay suppression |
+| Scheduled scans | Live, but firing every 30 min from a source that isn't in `wrangler.jsonc` (to investigate) |
+| Manual scan + digest | Live. Ask the agent and it scans, then sends one header text plus one text per lead |
+| Failure alerts | Live. A failed scheduled scan texts you once per failure streak |
+| Replies and tapbacks | Built, not connected. Needs the Photon webhook pointed at the Maritime wake URL |
+| Automatic digest after each scan | Not built. Digests are sent only when you ask |
 
-Lead IDs retain the existing convention: Reddit URL path, or SHA-256 of the
-normalized supplied post when there is no URL. The API derives and checks IDs.
-Changing a URL-less post changes its identity; changing a post at the same URL
-updates that lead and saves the new grade as a revision. Workflow status,
-feedback, and prior submission markers survive upserts.
+## The four flows
 
-[`0001_cloud.sql`](../migrations/0001_cloud.sql) remains unchanged.
-[`0002_crm.sql`](../migrations/0002_crm.sql) adds history and relationship tables;
-it copies existing grades, legacy feedback notes, and submission links without
-deleting old columns/records. A legacy note with no verdict is tagged `legacy`
-and dated when it is migrated, because its original feedback date is unknown.
-`runs` and `run_lock` now track scan execution and prevent overlap.
-`0003_scans.sql` adds persistent scan rotation/cooldown state and a unique report
-fingerprint so identical pending previews are reused. No hosted scheduler runs.
+### 1. Scan (Worker)
 
-The separate SQLite importer reads the old Bun database without modifying it.
-It never overwrites an existing D1 lead. Old reports have no trustworthy item
-ordering/conversation metadata; imports preserve the relationships with unknown
-item indices/conversations. Feedback on those reports requires an explicit lead ID.
-There was no legacy SQLite file in this checkout; tests use a populated fixture.
+1. The cron or `crm run_scan` calls `runScan` (`src/scan.ts`).
+2. Guards: a 3-minute D1 lease (`run_lock`) prevents overlapping runs. A saved Reddit cooldown (`scan_state.not_before`) skips the run without making a request.
+3. `src/reddit.ts` fetches `r/a+b+c+d/new/.rss?limit=100`, one request covering about a day of posts.
+4. Posts already graded are reused. Up to 20 new ones go to Jev (`src/jev.ts`), and each is saved as soon as it's graded.
+5. The run is saved in `runs` with counts (`fetched`, `classified`, `grades`) and a report of the top high/urgent leads.
 
-## A manual batch
+### 2. Digest (agent)
 
-1. Validate supplied posts; no URL is fetched.
-2. Read D1 and reuse unchanged grades for the same rubric; call Jev only when needed.
-3. Upsert post/grade through the API and preserve earlier revisions.
-4. List unsubmitted, `new`/`useful`, high/urgent leads sorted by score.
-5. Save a numbered preview of at most five leads, or submit only through an explicitly enabled live sender.
+1. You ask the agent ("run a scan and send me the digest").
+2. Codex reads the newest successful run and calls `get_lead` on each report lead to write a one-line "why".
+3. It sends a header text, then one text per lead, and saves each lead's message ID to `last-list.json`.
 
-The existing `algovox-v1` rubric covers upcoming technical interviews, relevant
-intern/new-grad recruiting, interview-focused LeetCode, and requests for mock
-practice. Score 2.5+ qualifies; 3.5+ is urgent; confidence below 0.5 requires
-review. Jev receives untrusted post content separately from rubric instructions.
-No new model account or reasoning framework was added. Offline fixtures and
-integration tests use saved/fake grades rather than contacting a model.
+### 3. Reply (agent, once the webhook is connected)
 
-A preview leaves candidates pending. A successful notification records the
-message's platform, conversation ID, report ID, and submission time. Submitted
-leads are excluded from future alerts; an edited source does not reset that
-marker. Dismissed/contacted leads remain excluded even if their source changes.
-`get_lead` exposes feedback for later grading review; the grader currently does
-not consume it or train on it automatically.
+1. You swipe-reply or tap 👍/👎 on a lead's text. Photon posts a webhook to Maritime, which wakes the VM.
+2. Photon webhooks leave out which message you replied to, so `src/inbound.ts` re-fetches your message through the Spectrum SDK, which does include it. It then maps the target message ID to a lead using `last-list.json`.
+3. Codex maps your words to a status ("reached out" → contacted, "too senior" → dismissed), runs `record_feedback`, and confirms with one short text.
 
-## Scheduled and manual scans
+### 4. Failure alert (Worker → agent)
 
-The Worker now exposes authenticated `POST /api/run_scan` and a `scheduled()`
-handler. Both invoke `runScan` in `src/scan.ts`, use the same D1 state, and never
-send messages. The configured 30-minute cron is deployment groundwork only:
-`SCAN_ENABLED=false` is the default and no Cloudflare account is connected.
-The local runner can simulate a scheduled event; it does not run a timer.
+1. A scheduled scan fails after its retries are used up.
+2. If the previous run didn't fail, the Worker posts `{"event":"scan_failed"}` to the wake URL.
+3. Codex confirms the failure in `list_scan_runs`, then texts you something like "Scan failed at 7:00 AM: …".
 
-1. Check explicit source/watchlist configuration and acquire a 180-second D1 lease.
-2. Fetch one bounded page from the next subreddit, or read the offline fixture.
-3. Reuse current grades; classify changed/new posts and save each successful result.
-4. Save/reuse a report preview containing this poll's eligible leads.
-5. Persist run outcome and source rotation, then release the lease.
+## Failure handling
 
-Normal local development disables scanning. `crm:dev --scan-demo` enables fixture
-scans in the separate `data/scan-demo-d1` store, with no model/messaging/Reddit
-credentials. See the [scan demo commands](../README.md#scheduled-and-manual-scan-groundwork).
+| Failure | What happens |
+|---|---|
+| Reddit 403, 5xx, network error, timeout | Retried after 1s and 4s (`src/retry.ts`) |
+| Jev 429, 5xx, network error | Retried once after 2s |
+| Reddit 429 | No retry. The reset time is saved, and later runs skip until it passes |
+| More than 20 new posts | The extra posts aren't saved, so the next run grades them |
+| Still failing | Run marked `failed`, graded posts kept, owner alerted (scheduled runs only) |
 
-The OAuth adapter requests an app-only token and uses Reddit's read-only `/new`
-listing. It polls at most five posts from one subreddit per run. This is the
-first bounded slice; high-volume communities need pagination/catch-up before
-this becomes comprehensive monitoring. Rate-limit responses/header cooldowns
-are saved in D1 rather than retried in a loop. Successful prior grades remain
-saved if a later grade or report write fails. A hard termination can leave a
-`running` history row until someone reviews it, but the lease expires.
+The worst case is 43 outgoing requests per run, under the Workers Free limit of 50.
 
-The 15-test suite and additional D1 checks verify fake OAuth transport,
-manual/scheduled parity, grade/report reuse, authentication, disabled defaults,
-lease/cooldown behavior, failure recovery, feedback suppression, and persistence.
-They do not verify live provider access or Cloudflare Free's CPU budget.
+## Where state lives
 
-## Target architecture and where the diagram's boxes belong
+| Where | What |
+|---|---|
+| D1 `leads`, `lead_revisions` | Every post (ID = Reddit URL path), its grade, status and earlier versions |
+| D1 `feedback_history` | Every verdict and reason, append-only |
+| D1 `runs`, `scan_state`, `run_lock` | Scan history, cooldown and the overlap lease |
+| D1 `reports`, `report_items` | Saved digest reports |
+| VM `/data/workspace/last-list.json` | The last digest: lead IDs in order, plus each one's message ID |
+| VM `/data/workspace/seen-messages.json` | Webhook message IDs already handled (Photon retries up to 6 times) |
+| VM `/data/.codex/` | Codex sign-in, model config (Luna 6, medium effort) and session history |
+| Worker secrets | `CRM_API_TOKEN`, `JEV_API_KEY`, `MARITIME_WEBHOOK_URL` |
+| Worker vars (`wrangler.jsonc`) | Subreddits, cron schedule, `SCAN_ENABLED` |
+| Maritime env | `CRM_URL`, `CRM_API_TOKEN`, `SPECTRUM_PROJECT_ID`/`SECRET`, `OWNER_PHONE`, `NOTIFY_ENABLED`, `CODEX_BIN` |
 
-```mermaid
-flowchart LR
-  Owner["You"] --> Photon["Photon: messaging transport"]
-  subgraph VM["Maritime VM — connection still pending"]
-    Agent["Codex runtime + CRM CLI"]
-  end
-  subgraph CF["Cloudflare Worker — currently local"]
-    Bridge["HTTP ingress + turn coordinator — proposed"]
-    API["Authenticated CRM API"]
-    Scanner["Shared scan function"]
-    Sender["Report sender — still pending"]
-  end
-  Photon -.->|"verified webhook required"| Bridge
-  Bridge -.->|"Maritime API; stable conversation ID"| Agent
-  Agent -.->|"completed answer"| Bridge
-  Bridge -.-> Photon
-  Agent -->|"lead tools"| API
-  Cron["Cron trigger or manual API"] --> Scanner
-  Reddit["External Reddit API"] -->|"posts"| Scanner
-  Scanner -->|"HTTPS grading request"| Jev["External Jev service"]
-  Jev -->|"classification"| Scanner
-  API --> D1[("D1 CRM")]
-  Scanner --> D1
-  D1 -.->|"pending reports"| Sender
-  Sender -.-> Photon
+Everything under `/data` survives VM sleep and redeploys. Nothing else on the VM is guaranteed to.
+
+## Checking what's going on
+
+```sh
+bun run crm list_scan_runs                         # recent runs: status, counts, errors
+bun run crm list_leads alerts                      # high/urgent leads not yet handled
+bunx wrangler tail                                 # live Worker logs
+maritime status photon-reddit-agent                # is the VM awake?
+maritime logs photon-reddit-agent                  # wake/sleep and server logs
+maritime chat photon-reddit-agent "what did you send last?"
+maritime exec photon-reddit-agent -- cat /data/workspace/last-list.json
 ```
 
-Photon is the transport; Codex and its shell tools belong in the VM. The
-proposed hosted application ingress/coordinator belongs beside the CRM API,
-with its exact completion/delivery mechanism still to be decided.
-Reddit and Jev are external services called by the scanner, rather than services
-we host inside Cloudflare. VM tools use our authenticated CRM API, rather than
-Cloudflare management credentials. A report sender still needs to connect stored
-previews to Photon; saving to D1 does not itself deliver a notification. The
-existing Bun sender has not been deployed or wired to drain scheduled previews.
+`crm` commands need `CRM_URL` and `CRM_API_TOKEN` in the environment. `maritime chat` replies within 30 seconds or says it's still working; ask again in the same conversation (`-c <id>`).
 
-The proposed first runtime is Maritime's existing Codex template: each message
-starts a run that resumes a saved thread using a stable conversation ID. CRM
-commands are documented executables invoked through Codex's shell tool; no
-second agent framework is planned. The current handler still echoes ordinary
-text. Session routing, agent-turn recovery, and numbered chat-selection links
-are not implemented. The proposal identifies the external wake-up path needed
-for a sleeping VM to receive iMessages; the current Spectrum gRPC subscription
-alone does not establish that path.
+## Security
 
-## Feedback path
+- The CRM API requires a bearer token (16+ characters). Inputs are validated and SQL is parameterized.
+- Reddit text is untrusted. Jev and Codex are both told never to follow instructions found in posts.
+- The Maritime wake URL has no auth, so the agent never trusts a webhook body directly. Replies are re-fetched from Photon, and failure alerts are checked against `list_scan_runs`.
+- Only messages from `OWNER_PHONE` are acted on.
 
-```mermaid
-sequenceDiagram
-  participant Owner
-  participant Handler as Spectrum handler
-  participant API as CRM Worker
-  participant D1
-  Owner->>Handler: Reply: Dismiss 2: interview already happened
-  Handler->>Handler: Check inbound direction and owner identity
-  Handler->>API: Event ID, text, platform, conversation, target message
-  API->>D1: Check replay; resolve message → report → item 2 → lead
-  alt One known target
-    API->>D1: Atomically save inbox response, feedback, and status
-    API-->>Handler: Saved verdict and reason
-  else Missing or ambiguous target
-    API->>D1: Save clarification response for this event
-    API-->>Handler: Which lead?
-  end
-  Handler-->>Owner: Acknowledge once unless event was a replay
-```
+## Known limits
 
-The cloud iMessage provider in installed Spectrum **12.10.1** normalizes threads
-as a `reply` content wrapper. The handler reads nested text and `target.id`; a
-stub target with only an ID still works. Multi-item reports require an item
-number or explicit lead ID. A bare verdict is accepted only for a one-item
-report. Resolution includes platform and conversation; it never picks the
-latest report. Unknown targets request clarification without changing leads.
-Outgoing messages, non-text content, and non-owner events are ignored.
-
-The `inbox` event key includes platform, conversation, and message ID. A D1
-transaction conditionally appends feedback/updates status only while the saved
-response is empty. Concurrent and later duplicates return the original result
-and never repeat the mutation or acknowledgement. Explicit lead-ID commands
-also work through the CLI with no Spectrum connection.
-
-The live receiver preserves echo responses for other owner text. Starting it
-requires explicit process opt-in and a CRM that permits notifications. The
-local runner never permits those notifications. Live SDK behavior was checked
-against the installed contract; actual phone delivery was not tested in this slice.
-
-## Security and local verification
-
-The Worker requires an application bearer token with at least 16 characters.
-Tokens come from process environment or a future Worker secret, never tool
-arguments. HTTP clients permit cleartext only on loopback and refuse redirects.
-Cloudflare account/management tokens are separate and absent from the API.
-Requests, arrays, text, statuses, classification values, pagination, and IDs are
-validated before writes. All SQL values are parameterized. Database errors do
-not expose SQL or credentials to API callers.
-
-`bun --no-env-file run test:d1` runs the actual bundled Worker against local D1,
-not a mock. It checks restart persistence, additive migration of existing data,
-authentication/validation, report context, history, concurrent replays, SQLite
-import, and batch behavior. Credentials, phone identities, sends, and grades in
-tests are isolated fixtures. `bun --no-env-file run check` checks TypeScript.
-See [README startup/smoke commands](../README.md#two-minute-smoke-test).
-
-Sending a Photon message and committing its submission cannot be one atomic
-transaction. A crash between them can create duplicates; delivery reconciliation
-is pending before automation. A saved inbound event followed by a failed
-acknowledgement can leave feedback persisted without a visible reply. Feedback
-persistence is verified; exactly-once network delivery is not claimed.
-
-## Hosting boundaries and next work
-
-The earlier Maritime checkpoint created a separate Codex runtime. It does not
-run this receiver, call this CRM, scan Reddit, or provide scheduling integration.
-No Maritime state was inspected or changed during this slice. Historical Photon
-phone tests do not establish current live delivery after this change.
-
-Local CRM access needs the Worker process running. With the laptop off, this
-application has no running API, receiver, grader, or scanner. Remote D1 and
-Cloudflare account access are pending; see [Connect Cloudflare later](connect-cloudflare.md).
-
-The next local slice proposed for review is the conversation bridge with fake
-runtime/messaging clients, persistent session routing, and mutation/delivery
-recovery against actual local D1. Subsequent work includes live Reddit access,
-database account setup, grading review against feedback, pagination/monitoring,
-and activation of the prepared schedule/report sender after live verification.
-Owner-reviewed outreach remains later work. The
-[README roadmap](../README.md#roadmap) tracks those actions. No hosted cron, cloud
-signup, deployment, provisioning, or paid model call was performed here.
-
-## Public examples of similar systems
-
-- [RedSignal](https://github.com/ivucicev/redsignal): open-source subreddit monitoring, optional AI filtering, lead tracking, and reply drafts.
-- [F5Bot + n8n build notes](https://www.reddit.com/r/n8n_ai_agents/comments/1tgqevd/i_built_a_simple_online_lead_generation_engine/): the author's workflow turns keyword-alert emails into AI-qualified Telegram alerts.
-- [How I Use Syften to Grow Syften](https://syften.com/blog/social-listening-use-cases/): a founder's notes on monitoring conversations to find customers.
-
-These are references for the pattern; their implementations/results were not audited.
+- Sending a text and recording it aren't atomic, so a crash between the two could repeat a text.
+- Reddit sometimes blocks Cloudflare IPs (403). Retries and the next run cover it.
+- If Jev is slow on every call, a run can outlast its 3-minute lease.
+- Migrations in `migrations/` are additive. Never edit one that has already been applied.

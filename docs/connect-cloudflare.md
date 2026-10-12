@@ -1,45 +1,53 @@
-# Connect Cloudflare later
+# Deploying the Worker
 
-**Pending: every remote step below.** Local D1 works without a Cloudflare account.
-Do not run this checklist as part of local development. No signup, CLI login,
-remote database, secret, migration, deployment, or remote read/write has been tested.
+The Worker is the scanner and the CRM. It runs on the Cloudflare Workers Free plan with one D1 database.
 
-1. **Owner account and verification.** The owner creates the Cloudflare account
-   and completes email verification. Choose the intended account and review its
-   D1/Workers limits before creating resources; this slice provisions nothing.
-2. **CLI authorization.** From this repository, run
-   `CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false node node_modules/wrangler/bin/wrangler.js login`,
-   finish the owner's browser authorization, and verify the account with the
-   same prefix followed by `whoami`. Keep CLI/account credentials outside agent
-   tool arguments and outside Git. Application tools use only `CRM_API_TOKEN`.
-3. **Database and configuration.** With that authorization, run
-   `CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false node node_modules/wrangler/bin/wrangler.js d1 create reddit-tracker`.
-   Replace the placeholder `database_id` in `wrangler.jsonc` with the returned
-   ID, verify account/name/binding `DB`, and keep notifications disabled.
-   The local runner uses `data/d1`; creating remote D1 does not copy its records.
-4. **Remote schema and secrets.** Review/back up any existing remote data, then run
-   `CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false node node_modules/wrangler/bin/wrangler.js d1 migrations apply reddit-tracker --remote`.
-   Store a new, unique application token through Wrangler's interactive
-   `secret put CRM_API_TOKEN` command using that same prefix; do not pass its
-   value as a command argument. Export `CRM_URL`/`CRM_API_TOKEN` in the client
-   runtime later. For CRM-only use, the Worker needs just that application token. For the
-   scanner, separately configure `REDDIT_CLIENT_ID`, `REDDIT_CLIENT_SECRET`, and
-   `JEV_API_KEY` as Worker secrets, plus `REDDIT_USER_AGENT` and
-   `SCAN_SUBREDDITS`. Keep `SCAN_ENABLED=false` until an authenticated manual
-   scan is verified. Photon credentials stay with the separate report sender. Decide and verify a full local
-   D1 data transfer before changing database ownership. Export/import of all
-   local CRM history/report tables is subsequent work; the legacy SQLite importer
-   is not a complete D1-to-D1 migration. Publishing/routing the Worker endpoint
-   is also a later, explicitly authorized hosting step, not part of this slice.
-5. **One verified remote write/read.** After an authenticated remote Worker
-   endpoint exists, use the CRM CLI to insert a clearly synthetic graded fixture
-   and fetch its exact lead ID. Record the returned source/grade/status; record
-   feedback and fetch its history. Repeat the fetch from a fresh process.
-   Verify a wrong token returns 401 and confirm no notification was sent.
-   Only then mark remote CRM access verified. Remote D1 schema creation alone
-   does not establish that the application endpoint works. Then verify one manual
-   `run_scan` with live providers and measure CPU/subrequests before enabling the
-   prepared 30-minute schedule; notifications remain disabled until their sender
-   and reconciliation path are verified.
+## First deploy
 
-For today, the remaining action is local: follow the [README smoke test](../README.md#two-minute-smoke-test).
+```sh
+bunx wrangler login
+bunx wrangler d1 create reddit-tracker
+```
+
+Copy the printed `database_id` into `wrangler.jsonc`, then:
+
+```sh
+bunx wrangler d1 migrations apply reddit-tracker --remote
+bunx wrangler secret put CRM_API_TOKEN          # random string, 16+ chars; the agent uses the same one
+bunx wrangler secret put JEV_API_KEY
+bunx wrangler secret put MARITIME_WEBHOOK_URL   # optional: enables failure alerts
+bunx wrangler deploy
+```
+
+If you keep a local `.env`, prefix wrangler commands with `CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false` so it isn't uploaded.
+
+## Configuration (`wrangler.jsonc`)
+
+| Var | Meaning |
+|---|---|
+| `SCAN_ENABLED` | `true` to allow scans |
+| `SCAN_SOURCE` | `reddit` for live, `fixture` for offline demos |
+| `SCAN_SUBREDDITS` | Comma-separated names, no `r/` |
+| `REDDIT_USER_AGENT` | Sent with each RSS request |
+| `JEV_MODEL` | Jev model, e.g. `jev-latest` |
+| `triggers.crons` | Scan schedule, e.g. `["*/15 * * * *"]`; `[]` for manual only |
+
+Redeploy after changing any of these.
+
+## Checking it works
+
+```sh
+export CRM_URL=https://<your-worker>.workers.dev CRM_API_TOKEN=<token>
+bun run crm run_scan          # expect fetched: 100 and a grade count
+bun run crm list_scan_runs
+bunx wrangler tail            # live logs, including scheduled runs
+```
+
+A wrong or missing token returns 401. A `Reddit feed failed: HTTP 403` now and then is Reddit blocking a Cloudflare IP; the retries and the next run cover it.
+
+## Updating
+
+```sh
+bunx wrangler d1 migrations apply reddit-tracker --remote   # only if migrations/ changed
+bunx wrangler deploy
+```
