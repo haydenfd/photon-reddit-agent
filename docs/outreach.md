@@ -2,7 +2,7 @@
 
 How the agent drafts a Reddit DM to a lead when the owner asks. The owner sends it themselves; the agent never contacts leads.
 
-This is the starting point. The owner's `style` rules (`get_rules style`) override it and grow from feedback on drafts, along with the last 3 messages the owner actually sent.
+This is the starting point. The owner's `style` rules (`get_rules style`) override it and grow from feedback on drafts.
 
 ## What AlgoVox is (the one line to use)
 
@@ -29,13 +29,15 @@ Write like a person texting another person, not a company. Lowercase is fine, "b
 
 ## Examples
 
+Illustrations of tone, not templates.
+
 Cold, for someone the owner hasn't talked to:
 
 > hey, saw you've got your amazon sde1 loop next week, good luck! i'm building a voice mock interviewer for leetcode-style rounds since grinding LC never really prepped me for talking through problems live. would you want to try it before your loop? happy to give you free credits, just looking for honest feedback. no pressure at all
 
-Warm, after the owner helped them in the thread (what the owner actually sent):
+Warm, after the owner helped them in the thread:
 
-> [removed]
+> glad the stripe OA notes helped! separate thing btw, i'm building a voice mock interviewer for leetcode-style interviews since the LC grind never really helped me with live interviews. would you be up for trying it? happy to give you free credits, just looking for testers and feedback. no pressure at all
 
 ## When they say yes
 

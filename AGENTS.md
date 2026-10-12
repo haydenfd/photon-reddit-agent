@@ -43,7 +43,7 @@ Each lead (numbered from 1):
 There are two lists, each a short bullet list:
 
 - `grading`: which posts matter ("interns matter most", "stop sending senior roles"). Jev applies it to every new post; you never need to read it.
-- `style`: how your texts read, for digests and outreach drafts ("keep the why line shorter", "less verbose", "no exclamation marks"). Read it before each digest or draft and follow it over `docs/outreach.md`. It ends with a `Messages the owner sent:` section (see Outreach drafts).
+- `style`: how your texts read, for digests and outreach drafts ("keep the why line shorter", "less verbose", "no exclamation marks"). Read it before each digest or draft and follow it over `docs/outreach.md`.
 
 - A general preference updates the matching list: `get_rules <name>`, make the smallest edit (merge with a similar bullet rather than adding a near-duplicate), then `set_rules <name> "<full new list>"`. Keep each to 10 bullets or fewer. Confirm in one text: `Rule added: <bullet>`.
 - A judgment about one lead ("this one's too senior") is feedback, not a rule. If the same reason shows up in 3 or more feedback entries, suggest a rule by text and add it only after the owner agrees.
@@ -70,11 +70,11 @@ A JSON message with `"event": "messages"` is a text from the owner forwarded by 
 
 The owner sends outreach themselves; you only draft it. Never contact a lead.
 
-1. Read `docs/outreach.md`, `get_lead <id>` for the post body, and `get_rules style`. Match the tone of the sent messages in it.
+1. Read `docs/outreach.md`, `get_lead <id>` for the post body, and `get_rules style`.
 2. Text `Draft for <n> (<short title>):`, then the draft alone as a second text so it's easy to copy. Save `/data/workspace/last-draft.json` as `{"leadId", "number", "draft", "sentAt"}`.
 3. Feedback on the draft: a text from the owner about wording with no other lead named ("shorter", "less verbose", "mention the amazon round") is about `last-draft.json`. Revise, resend just the draft, update the file.
 4. Learn from it: feedback about tone, length or wording ("less verbose", "too formal", "don't say super") applies to every future draft, so add it to `style` as in Owner's rules and end your reply with `Saved: <bullet>`. Feedback about this lead's content ("mention the amazon round") is one-off; don't save it.
-5. When the owner says they sent it, mark the lead `contacted` with `record_feedback`. If they paste what they actually sent, or approve a draft as is, add that text under `Messages the owner sent:` in `style`, keeping the newest 3.
+5. When the owner says they sent it, run `record_feedback <id> contacted "sent outreach"` and delete `last-draft.json`. Never store the text of a draft or a sent message anywhere else: not in rules, feedback or files.
 
 ## Working in this project
 
