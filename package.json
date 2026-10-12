@@ -14,6 +14,7 @@
     "crm:import": "bun --no-env-file src/import-sqlite.ts",
     "leads": "bun --no-env-file src/leads.ts",
     "send": "bun --no-env-file src/send-message.ts",
+    "inbound": "bun --no-env-file src/inbound.ts",
     "vm:pull": "maritime exec photon-reddit-agent -- bash -c 'cd /data/workspace/photon-reddit-agent && git pull && /data/.bun/bin/bun install --frozen-lockfile'",
     "leads:demo":"bun --no-env-file src/leads.ts examples/leads.json --demo"
   },
