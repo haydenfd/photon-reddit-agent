@@ -19,6 +19,7 @@ export type ScanEnv = RedditConfig & {
 export type ScanSummary = {
   id: string; trigger: "manual" | "scheduled"; source: string; subreddit: string;
   fetched: number; classified: number; reused: number; moreAvailable: boolean;
+  grades: Partial<Record<Classification["priority"], number>>; // priorities of posts graded this run
   report: { id: string; body: string } | null;
 };
 type Operate = (name: string, args: Record<string, unknown>) => Promise<unknown>;
@@ -46,7 +47,7 @@ export async function runScan(env: ScanEnv, trigger: "manual" | "scheduled", ope
     // Fixtures rotate one subreddit per run; the live feed reads the whole watchlist in one request.
     const index = state!.next_index % config.subreddits.length;
     const subreddit = config.source === "fixture" ? config.subreddits[index]! : config.subreddits.join("+");
-    const summary: ScanSummary = { id, trigger, source: config.source, subreddit, fetched: 0, classified: 0, reused: 0, moreAvailable: false, report: null };
+    const summary: ScanSummary = { id, trigger, source: config.source, subreddit, fetched: 0, classified: 0, reused: 0, moreAvailable: false, grades: {}, report: null };
     await db.prepare("INSERT INTO runs (id, started_at, status, summary) VALUES (?, ?, 'running', ?)").bind(id, new Date(now).toISOString(), JSON.stringify(summary)).run();
     started = true;
     let posts: LeadPost[], fixtures: SavedLead[] = [];
@@ -79,6 +80,7 @@ export async function runScan(env: ScanEnv, trigger: "manual" | "scheduled", ope
           : await classifyLead(post, fetch, { apiKey: env.JEV_API_KEY, model: env.JEV_MODEL });
         await operate("upsert_leads", { leads: [{ id: key, post, result }] });
         summary.classified++; fresh.push(key);
+        summary.grades[result.priority] = (summary.grades[result.priority] ?? 0) + 1;
       }
       // list_leads accepts at most 20 IDs; prefer posts graded in this run.
       const candidates = [...fresh, ...reused].slice(0, 20);
