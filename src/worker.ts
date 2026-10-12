@@ -6,7 +6,7 @@ import { parseFeedback } from "./feedback.ts";
 import { runScan, type ScanEnv } from "./scan.ts";
 import { ScanError } from "./reddit.ts";
 
-type Env = ScanEnv & { CRM_API_TOKEN: string; NOTIFY_ENABLED?: string };
+type Env = ScanEnv & { CRM_API_TOKEN: string; NOTIFY_ENABLED?: string; MARITIME_WEBHOOK_URL?: string };
 type Row = { id: string; post: string; result: string | null; status: LeadStatus; created_at: string; updated_at: string | null; submitted_at: string | null; message_id: string | null };
 class ApiError extends Error { constructor(message: string, public status = 400) { super(message); } }
 function object(value: unknown): Record<string, unknown> {
@@ -241,12 +241,25 @@ async function operation(name: string, args: Record<string, unknown>, env: Env):
   throw new ApiError("Unknown operation.", 404);
 }
 
+// A failed scheduled scan wakes the Maritime agent, which confirms it in list_scan_runs and texts the owner.
+// Only the first failure in a row alerts, so an outage sends one text rather than one per run.
+async function alertScanFailure(env: Env, error: unknown) {
+  if (!env.MARITIME_WEBHOOK_URL) return;
+  const { results } = await env.DB.prepare("SELECT status FROM runs ORDER BY started_at DESC, id DESC LIMIT 2").all<{ status: string }>();
+  if (results.length === 2 && results.every(run => run.status === "failed")) return;
+  const message = error instanceof ScanError ? error.message : "Scan failed; see the Worker logs.";
+  await fetch(env.MARITIME_WEBHOOK_URL, { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ event: "scan_failed", at: new Date().toISOString(), error: message }) })
+    .catch(alertError => console.error("scan failure alert failed:", alertError));
+}
+
 export default {
   async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
     if (env.SCAN_ENABLED !== "true") return;
     try { await runScan(env, "scheduled", (name, args) => operation(name, args, env)); }
     catch (error) {
       if (error instanceof ScanError && [409, 429].includes(error.status)) return;
+      await alertScanFailure(env, error);
       throw error;
     }
   },
