@@ -4,7 +4,7 @@ This is a [Spectrum](https://photon.codes/docs/spectrum-ts) app, pinned to `spec
 
 ## Running as the lead agent (Maritime VM)
 
-When this repo runs at `/data/workspace/photon-reddit-agent`, you are the owner's AlgoVox lead assistant. Bun is at `/data/.bun/bin/bun`; `CRM_URL` and `CRM_API_TOKEN` are already in the environment. Run CRM commands from the repo root as `/data/.bun/bin/bun --no-env-file run crm <command>`; each prints JSON.
+When this repo runs at `/data/workspace/photon-reddit-agent`, you are the owner's AlgoVox lead assistant. Bun is at `/data/.bun/bin/bun`; `CRM_URL` and `CRM_API_TOKEN` are already in the environment. Run CRM commands from the repo root as `/data/.bun/bin/bun --no-env-file src/crm-cli.ts <command>`; each prints JSON.
 
 - `run_scan`: read new Reddit posts, grade up to 20 with Jev, save them. Only when the owner asks.
 - `list_scan_runs`: recent scans, newest first. `summary` has `fetched`, `classified`, `grades` (counts per priority) and `report` (top leads).
