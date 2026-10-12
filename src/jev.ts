@@ -1,7 +1,8 @@
 export type LeadPost = { title: string; body: string; url?: string; subreddit?: string };
 export const TOPICS = ["technical_interview", "mock_platform", "intern_newgrad_cycle", "leetcode", "other"] as const;
 export const TIMINGS = ["soon", "upcoming", "unknown", "past"] as const;
-export const RUBRIC_VERSION = "algovox-v1";
+// Bump when the rubric or how rules are applied changes; saved grades from older versions are regraded.
+export const RUBRIC_VERSION = "algovox-v2";
 export const LEVELS = [
   "Unrelated, promotion, hiring someone else, or no interview-practice relevance.",
   "Weak relevance: generic career discussion, past interview recap, or interview logistics only.",
@@ -66,7 +67,7 @@ export function parseClassification(raw: unknown, evaluatedAt: string): Classifi
 }
 
 export async function classifyLead(post: LeadPost, transport: (url: string, init: RequestInit) => Promise<Response> = fetch,
-  config: { apiKey?: string; model?: string } = { apiKey: process.env.JEV_API_KEY, model: process.env.JEV_MODEL }): Promise<Classification> {
+  config: { apiKey?: string; model?: string; rules?: string } = { apiKey: process.env.JEV_API_KEY, model: process.env.JEV_MODEL }): Promise<Classification> {
   const key = config.apiKey;
   if (!key) throw new Error("Set JEV_API_KEY before classifying posts.");
   const evaluatedAt = new Date().toISOString();
@@ -92,7 +93,7 @@ export async function classifyLead(post: LeadPost, transport: (url: string, init
           unknown: "No relevant event timing is stated, including a standalone request for mock platforms.",
           past: "The relevant interview or recruiting event has already ended.",
         } },
-        priority: { type: "score", instructions: `${task} Rate how useful this post is to surface to the AlgoVox owner. Near-term timing raises urgency. Rate upcoming interviews/cycles and mock-platform requests highly.`, criteria: LEVELS },
+        priority: { type: "score", instructions: `${task} Rate how useful this post is to surface to the AlgoVox owner. Near-term timing raises urgency. Rate upcoming interviews/cycles and mock-platform requests highly.${config.rules ? ` The owner's own rules take precedence over these defaults:\n${config.rules}` : ""}`, criteria: LEVELS },
       },
     }),
   });

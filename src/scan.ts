@@ -75,12 +75,13 @@ export async function runScan(env: ScanEnv, trigger: "manual" | "scheduled", ope
         .all<{ id: string; post: string; result: string | null }>();
       const existing = new Map(rows.results.map(row => [row.id, row]));
       const fresh: string[] = [], reused: string[] = [];
+      const rules = (await db.prepare("SELECT body FROM rules WHERE id = 1").first<{ body: string }>())?.body;
       for (const post of posts) {
         const key = leadId(post), cached = existing.get(key);
         if (cached?.result && cached.post === JSON.stringify(post) && (JSON.parse(cached.result) as Classification).rubricVersion === RUBRIC_VERSION) { summary.reused++; reused.push(key); continue; }
         if (summary.classified >= GRADE_LIMIT) { summary.moreAvailable = true; continue; }
         const result = config.source === "fixture" ? fixtures.find(row => row.id === key)!.result
-          : await classifyLead(post, jevTransport, { apiKey: env.JEV_API_KEY, model: env.JEV_MODEL });
+          : await classifyLead(post, jevTransport, { apiKey: env.JEV_API_KEY, model: env.JEV_MODEL, rules });
         await operate("upsert_leads", { leads: [{ id: key, post, result }] });
         summary.classified++; fresh.push(key);
         summary.grades[result.priority] = (summary.grades[result.priority] ?? 0) + 1;

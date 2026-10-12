@@ -44,7 +44,7 @@ The Worker never talks to iMessage, and the agent never talks to Reddit. They on
 1. The cron or `crm run_scan` calls `runScan` (`src/scan.ts`).
 2. Guards: a 3-minute D1 lease (`run_lock`) prevents overlapping runs. A saved Reddit cooldown (`scan_state.not_before`) skips the run without making a request.
 3. `src/reddit.ts` fetches `r/a+b+c+d/new/.rss?limit=100`, one request covering about a day of posts.
-4. Posts already graded are reused. Up to 20 new ones go to Jev (`src/jev.ts`), and each is saved as soon as it's graded.
+4. Posts already graded under the current rubric are reused. Up to 20 new ones go to Jev (`src/jev.ts`) together with the owner's rules (`rules` table), and each is saved as soon as it's graded.
 5. The run is saved in `runs` with counts (`fetched`, `classified`, `grades`) and a report of the top high/urgent leads.
 
 ### 2. Digest (agent)
@@ -86,6 +86,7 @@ The worst case is 43 outgoing requests per run, under the Workers Free limit of 
 | D1 `feedback_history` | Every verdict and reason, append-only |
 | D1 `runs`, `scan_state`, `run_lock` | Scan history, cooldown and the overlap lease |
 | D1 `reports`, `report_items` | Saved digest reports |
+| D1 `rules` | The owner's grading and style rules, passed to Jev on every scan |
 | VM `/data/workspace/last-list.json` | The last digest: lead IDs in order, plus each one's message ID |
 | VM `/data/workspace/seen-messages.json` | Webhook message IDs already handled (Photon retries up to 6 times) |
 | VM `/data/.codex/` | Codex sign-in, model config (Luna 6, medium effort) and session history |

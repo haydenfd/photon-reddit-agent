@@ -15,7 +15,7 @@
       "priority": "high",
       "reason": "Synthetic fixture; not a live Jev result.",
       "model": "fixture-not-a-model-call",
-      "rubricVersion": "algovox-v1",
+      "rubricVersion": "algovox-v2",
       "evaluatedAt": "2026-10-10T00:00:00Z"
     }
   }

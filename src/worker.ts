@@ -71,6 +71,17 @@ async function operation(name: string, args: Record<string, unknown>, env: Env):
     fields(args, []);
     return runScan(env, "manual", (operationName, operationArgs) => operation(operationName, operationArgs, env));
   }
+  if (name === "get_rules") {
+    fields(args, []);
+    return await db.prepare("SELECT body, updated_at FROM rules WHERE id = 1").first() ?? { body: "", updated_at: null };
+  }
+  if (name === "set_rules") {
+    // The owner's grading and style rules: Jev reads them on every scan, the agent when writing texts.
+    fields(args, ["body"]);
+    const body = string(args.body, "body", 2000, true);
+    await db.prepare(`INSERT INTO rules (id, body, updated_at) VALUES (1, ?, ${NOW}) ON CONFLICT(id) DO UPDATE SET body = excluded.body, updated_at = excluded.updated_at`).bind(body).run();
+    return { body };
+  }
   if (name === "list_scan_runs") {
     fields(args, ["limit"]);
     const limit = integer(args.limit, "limit", 1, 100, 10);
