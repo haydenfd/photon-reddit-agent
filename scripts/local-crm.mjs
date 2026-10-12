@@ -25,7 +25,7 @@ export async function createLocalCrm({ persist, token, port = 8787, notification
     compatibilityDate: "2025-04-01", compatibilityFlags: ["nodejs_compat"],
     unsafeTriggerHandlers: true,
     host: "127.0.0.1", port, d1Databases: { DB: "reddit-tracker" }, resourcePersistencePath: persist || resolve(root, scanDemo ? "data/scan-demo-d1" : "data/d1"),
-    bindings: { CRM_API_TOKEN: token, NOTIFY_ENABLED: notifications ? "true" : "false", SCAN_ENABLED: scanDemo ? "true" : "false",
+    bindings: { CRM_API_TOKEN: token, NOTIFY_ENABLED: notifications ? "true" : "false", SCAN_ENABLED: scanDemo ? "true" : "false", SCHEDULED_SCANS: scanDemo ? "true" : "false",
       ...(scanDemo ? { SCAN_SOURCE: "fixture", SCAN_SUBREDDITS: "demo", SCAN_FIXTURE_JSON: await readFile(resolve(root, "examples/graded-leads.json"), "utf8") } : {}) },
   }));
   try {

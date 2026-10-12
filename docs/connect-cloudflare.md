@@ -25,7 +25,8 @@ If you keep a local `.env`, prefix wrangler commands with `CLOUDFLARE_LOAD_DEV_V
 
 | Var | Meaning |
 |---|---|
-| `SCAN_ENABLED` | `true` to allow scans |
+| `SCAN_ENABLED` | `true` to allow scans at all |
+| `SCHEDULED_SCANS` | `true` to let the cron run scans; manual `run_scan` works either way |
 | `SCAN_SOURCE` | `reddit` for live, `fixture` for offline demos |
 | `SCAN_SUBREDDITS` | Comma-separated names, no `r/` |
 | `REDDIT_USER_AGENT` | Sent with each RSS request |

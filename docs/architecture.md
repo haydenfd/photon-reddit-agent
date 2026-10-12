@@ -31,7 +31,7 @@ The Worker never talks to iMessage, and the agent never talks to Reddit. They on
 
 | Flow | Status |
 |---|---|
-| Scheduled scans | Live, but firing every 30 min from a source that isn't in `wrangler.jsonc` (to investigate) |
+| Scheduled scans | Paused (`SCHEDULED_SCANS=false`). A cron was still firing every 30 min despite `crons: []` (to investigate) |
 | Manual scan + digest | Live. Ask the agent and it scans, then sends one header text plus one text per lead |
 | Failure alerts | Live. A failed scheduled scan texts you once per failure streak |
 | Replies and tapbacks | Built, not connected. Needs the Photon webhook pointed at the Maritime wake URL |

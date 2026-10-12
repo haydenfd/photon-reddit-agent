@@ -6,7 +6,7 @@ import { parseFeedback } from "./feedback.ts";
 import { runScan, type ScanEnv } from "./scan.ts";
 import { ScanError } from "./reddit.ts";
 
-type Env = ScanEnv & { CRM_API_TOKEN: string; NOTIFY_ENABLED?: string; MARITIME_WEBHOOK_URL?: string };
+type Env = ScanEnv & { CRM_API_TOKEN: string; NOTIFY_ENABLED?: string; MARITIME_WEBHOOK_URL?: string; SCHEDULED_SCANS?: string };
 type Row = { id: string; post: string; result: string | null; status: LeadStatus; created_at: string; updated_at: string | null; submitted_at: string | null; message_id: string | null };
 class ApiError extends Error { constructor(message: string, public status = 400) { super(message); } }
 function object(value: unknown): Record<string, unknown> {
@@ -255,7 +255,8 @@ async function alertScanFailure(env: Env, error: unknown) {
 
 export default {
   async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
-    if (env.SCAN_ENABLED !== "true") return;
+    // Cron runs are opt-in, separately from manual run_scan.
+    if (env.SCAN_ENABLED !== "true" || env.SCHEDULED_SCANS !== "true") return;
     try { await runScan(env, "scheduled", (name, args) => operation(name, args, env)); }
     catch (error) {
       if (error instanceof ScanError && [409, 429].includes(error.status)) return;
