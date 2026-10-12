@@ -3,7 +3,7 @@ import { STATUSES, type FeedbackEvent, type FeedbackVerdict, type LeadStatus } f
 
 export async function runCrmCli(argv: string[], client = new CrmClient()): Promise<unknown> {
   const [command, ...args] = argv;
-  const usage = "Usage: crm run_scan | list_scan_runs | list_leads [status|all|alerts] [offset] [limit] | get_lead <id> | set_lead_status <id> <new|useful|dismissed|contacted> | record_feedback <id> <useful|dismissed|contacted> <reason> | upsert_leads <graded.json> | process_feedback <event.json>";
+  const usage = "Usage: crm run_scan | list_scan_runs | list_leads [status|all|alerts] [offset] [limit] | get_lead <id> | set_lead_status <id> <new|useful|dismissed|contacted> | record_feedback <id> <useful|dismissed|contacted> <reason> | record_submission <reportId> <messageId> <spaceId> | upsert_leads <graded.json> | process_feedback <event.json>";
   switch (command) {
     case "run_scan":
       if (args.length) throw new Error(usage);
@@ -25,6 +25,10 @@ export async function runCrmCli(argv: string[], client = new CrmClient()): Promi
     case "record_feedback":
       if (args.length !== 3) throw new Error(usage);
       return client.recordFeedback(args[0]!, args[1] as FeedbackVerdict, args[2]!);
+    case "record_submission":
+      // Marks every lead in the report as texted, so later scan reports skip them.
+      if (args.length !== 3) throw new Error(usage);
+      return client.recordSubmission(args[0]!, { messageId: args[1]!, spaceId: args[2]!, platform: "imessage" });
     case "upsert_leads":
       if (args.length !== 1) throw new Error(usage);
       return client.call("upsert_leads", { leads: await Bun.file(args[0]!).json() });

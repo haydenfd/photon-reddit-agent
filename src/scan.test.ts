@@ -59,3 +59,11 @@ test("scans default off; configuration requires a bounded watchlist and explicit
   expect(() => scanConfig({ ...env, SCAN_SOURCE: "reddit" })).toThrow("JEV_API_KEY");
   expect(() => scanConfig({ ...env, SCAN_SOURCE: "scrape" })).toThrow("SCAN_SOURCE");
 });
+
+test("quiet hours run 11 PM–8 AM in the owner's timezone", async () => {
+  const { inQuietHours } = await import("./worker.ts");
+  expect(inQuietHours("America/Los_Angeles", new Date("2026-10-12T06:30:00Z"))).toBe(true);   // 11:30 PM PDT
+  expect(inQuietHours("America/Los_Angeles", new Date("2026-10-12T14:59:00Z"))).toBe(true);   // 7:59 AM PDT
+  expect(inQuietHours("America/Los_Angeles", new Date("2026-10-12T15:00:00Z"))).toBe(false);  // 8:00 AM PDT
+  expect(inQuietHours("America/Los_Angeles", new Date("2026-10-12T05:59:00Z"))).toBe(false);  // 10:59 PM PDT
+});

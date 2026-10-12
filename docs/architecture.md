@@ -35,7 +35,7 @@ The Worker never talks to iMessage, and the agent never talks to Reddit. They on
 | Manual scan + digest | Live. Ask the agent and it scans, then sends one header text plus one text per lead |
 | Failure alerts | Live. A failed scheduled scan texts you once per failure streak |
 | Replies and tapbacks | Built, not connected. Needs the Photon webhook pointed at the Maritime wake URL |
-| Automatic digest after each scan | Not built. Digests are sent only when you ask |
+| Automatic digest after each scan | Built, not deployed. A scheduled scan with new leads wakes the agent (not during quiet hours, 11 PM–8 AM) |
 
 ## The four flows
 
@@ -49,9 +49,10 @@ The Worker never talks to iMessage, and the agent never talks to Reddit. They on
 
 ### 2. Digest (agent)
 
-1. You ask the agent ("run a scan and send me the digest").
-2. Codex reads the newest successful run and calls `get_lead` on each report lead to write a one-line "why".
-3. It sends a header text, then one text per lead, and saves each lead's message ID to `last-list.json`.
+1. Either you ask the agent, or a scheduled scan's report has leads never texted before. In that case the Worker posts `{"event":"scan_completed"}` to the wake URL, except during quiet hours.
+2. Codex reads the run's report and calls `get_lead` on each lead to write a one-line "why".
+3. It sends a header text, then one text per lead, and saves the message IDs to `last-list.json`.
+4. It runs `record_submission`, which marks those leads as texted. Later reports leave them out, so no lead is texted twice.
 
 ### 3. Reply (agent, once the webhook is connected)
 

@@ -46,5 +46,4 @@ Photon retries a webhook up to 6 times. `src/inbound.ts` keeps the last 200 hand
 
 ## Not built yet
 
-- Sending a digest automatically after each scan, instead of only on request.
 - Learning from feedback: a short rules note (e.g. "interns and new grads first") that Jev reads on every scan and Codex updates from your replies.

@@ -13,6 +13,6 @@
   }],
   // No schedule yet: scans run manually with `crm run_scan`. Re-add "triggers": { "crons": ["*/30 * * * *"] } when ready.
   "triggers": { "crons": [] },
-  "vars": { "NOTIFY_ENABLED": "false", "SCAN_ENABLED": "true", "SCHEDULED_SCANS": "false", "SCAN_SOURCE": "reddit", "SCAN_SUBREDDITS": "cscareerquestions,csMajors,leetcode,ExperiencedDevs", "REDDIT_USER_AGENT": "web:photon-reddit-agent:0.1", "JEV_MODEL": "jev-latest" },
+  "vars": { "NOTIFY_ENABLED": "true", "OWNER_TZ": "America/Los_Angeles", "SCAN_ENABLED": "true", "SCHEDULED_SCANS": "false", "SCAN_SOURCE": "reddit", "SCAN_SUBREDDITS": "cscareerquestions,csMajors,leetcode,ExperiencedDevs", "REDDIT_USER_AGENT": "web:photon-reddit-agent:0.1", "JEV_MODEL": "jev-latest" },
   "observability": { "enabled": true }
 }
