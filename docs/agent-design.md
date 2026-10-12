@@ -50,5 +50,6 @@ The owner's preferences live in one short rules list in D1 (`get_rules` / `set_r
 
 - Jev gets the rules in its priority instructions on every scan, so they apply to posts it has never seen. Rules describe kinds of posts, not specific posts.
 - Codex edits the rules when you state a general preference, and suggests one when the same feedback reason keeps recurring.
+- Outreach style follows the same path: Codex drafts DMs from [`outreach.md`](outreach.md) plus any style rules, and "never use exclamation marks" becomes a rule.
 - The list stays visible and editable: text "show rules" or "drop rule 2".
 - Bumping `RUBRIC_VERSION` in `src/jev.ts` regrades saved posts, up to 20 per run.

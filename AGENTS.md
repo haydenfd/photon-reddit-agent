@@ -59,8 +59,19 @@ A JSON message with `"event": "messages"` is a text from the owner forwarded by 
 - `replyTo.lead` set: the owner swiped to reply or reacted to that lead's text (`replyTo.number` is its number). That lead is the target.
 - Otherwise resolve the lead from the text: a number by position in `last-list.json`, or a name ("the Stripe one") by matching titles via `get_lead`. If unsure, ask which lead.
 - Map the owner's words to a status in plain English: "reached out", "messaged them", "dm'd" → contacted; "not a good lead", "too senior", "nah", 👎 → dismissed; "good one", "useful", 👍, ❤️ → useful. Run `record_feedback <id> <status> "<their words>"`, then confirm in one short text, e.g. "Marked 2 (Stripe) contacted."
+- A request for a message to a lead ("help me write to this one", "draft a DM for 3"): see Outreach drafts below. This is not feedback; don't change the lead's status.
 - Not about a lead (a question, "send a digest", "run a scan"): handle it as a normal request and reply by text.
 - If the script errors, text the owner the one-line error instead of guessing.
+
+### Outreach drafts
+
+The owner sends outreach themselves; you only draft it. Never contact a lead.
+
+1. Read `docs/outreach.md`, `get_lead <id>` for the post body, and `get_rules` for style rules.
+2. Text `Draft for <n> (<short title>):`, then the draft alone as a second text so it's easy to copy.
+3. "Shorter", "more casual", "mention the Amazon round" → revise and resend just the draft.
+4. A general style preference ("never use exclamation marks") is a rule: add it as in Owner's rules.
+5. Mark the lead `contacted` only when the owner says they sent it.
 
 ## Working in this project
 
