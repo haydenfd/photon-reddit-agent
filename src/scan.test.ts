@@ -33,7 +33,20 @@ test("rate limits and failures stop without echoing provider bodies", async () =
     expect((error as ScanError).retryAt).toBeGreaterThan(Date.now() + 33_000);
     expect((error as Error).message).not.toContain("provider-secret");
   }
-  await expect(fetchRedditPosts(["demo"], {}, async () => new Response("provider-secret", { status: 403 }))).rejects.toThrow("HTTP 403");
+  let calls = 0;
+  await expect(fetchRedditPosts(["demo"], {}, async () => { calls++; return new Response("provider-secret", { status: 403 }); }, [0, 0])).rejects.toThrow("HTTP 403");
+  expect(calls).toBe(3);
+  calls = 0;
+  await fetchRedditPosts(["demo"], {}, async () => { calls++; return new Response("", { status: 429 }); }, [0, 0]).catch(() => {});
+  expect(calls).toBe(1);
+});
+
+test("transient Reddit failures are retried before the run fails", async () => {
+  const replies = [() => { throw new TypeError("network"); }, () => new Response("", { status: 503 }), () => new Response("<feed></feed>")];
+  let calls = 0;
+  const page = await fetchRedditPosts(["demo"], {}, async () => replies[calls++]!(), [0, 0]);
+  expect(calls).toBe(3);
+  expect(page.posts).toEqual([]);
   await expect(fetchRedditPosts(["demo"], {}, async () => new Response("x".repeat(2_000_001)))).rejects.toThrow("2 MB");
   await expect(fetchRedditPosts(["../secret"], {}, async () => { throw new Error("must not call"); })).rejects.toThrow("Invalid subreddit");
 });

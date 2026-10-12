@@ -2,10 +2,13 @@ import type { D1Database } from "@cloudflare/workers-types";
 import { classifyLead, parsePosts, RUBRIC_VERSION, type Classification, type LeadPost } from "./jev.ts";
 import { leadId, type SavedLead } from "./lead-utils.ts";
 import { fetchRedditPosts, ScanError, type RedditConfig } from "./reddit.ts";
+import { retrying } from "./retry.ts";
 
 const FIXTURE_LIMIT = 5;
 // Jev calls are subrequests; Workers Free allows 50 per invocation. Ungraded posts are picked up next run.
+// Worst case: 3 Reddit attempts + 20 posts × 2 Jev attempts = 43.
 export const GRADE_LIMIT = 20;
+const jevTransport = retrying(fetch, { statuses: [429, 500, 502, 503, 504], delays: [2_000] });
 
 export type ScanEnv = RedditConfig & {
   DB: D1Database;
@@ -77,7 +80,7 @@ export async function runScan(env: ScanEnv, trigger: "manual" | "scheduled", ope
         if (cached?.result && cached.post === JSON.stringify(post) && (JSON.parse(cached.result) as Classification).rubricVersion === RUBRIC_VERSION) { summary.reused++; reused.push(key); continue; }
         if (summary.classified >= GRADE_LIMIT) { summary.moreAvailable = true; continue; }
         const result = config.source === "fixture" ? fixtures.find(row => row.id === key)!.result
-          : await classifyLead(post, fetch, { apiKey: env.JEV_API_KEY, model: env.JEV_MODEL });
+          : await classifyLead(post, jevTransport, { apiKey: env.JEV_API_KEY, model: env.JEV_MODEL });
         await operate("upsert_leads", { leads: [{ id: key, post, result }] });
         summary.classified++; fresh.push(key);
         summary.grades[result.priority] = (summary.grades[result.priority] ?? 0) + 1;

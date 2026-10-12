@@ -1,3 +1,4 @@
+import { retrying } from "./retry.ts";
 import { parsePosts, type LeadPost } from "./jev.ts";
 
 export class ScanError extends Error {
@@ -35,11 +36,12 @@ function retryAt(response: Response) {
   return Date.now() + Math.min(86_400, Math.max(1, seconds)) * 1000;
 }
 
-export async function fetchRedditPosts(subreddits: string[], config: RedditConfig, transport: (url: string, init: RequestInit) => Promise<Response> = fetch): Promise<RedditPage> {
+// A 403 is Reddit blocking one Cloudflare egress IP, so it is retried like a 5xx; a 429 is not (the saved cooldown handles it).
+export async function fetchRedditPosts(subreddits: string[], config: RedditConfig, transport: (url: string, init: RequestInit) => Promise<Response> = fetch, delays = [1_000, 4_000]): Promise<RedditPage> {
   if (!subreddits.length || subreddits.some(s => !/^[A-Za-z0-9_]{2,21}$/.test(s))) throw new ScanError("Invalid subreddit configuration.", 503);
   const agent = config.REDDIT_USER_AGENT || "web:photon-reddit-agent:0.1";
-  const response = await transport(`https://www.reddit.com/r/${subreddits.join("+")}/new/.rss?limit=${FEED_LIMIT}`, {
-    redirect: "manual", signal: AbortSignal.timeout(20_000), headers: { "User-Agent": agent },
+  const response = await retrying(transport, { statuses: [403, 500, 502, 503, 504], delays })(`https://www.reddit.com/r/${subreddits.join("+")}/new/.rss?limit=${FEED_LIMIT}`, {
+    redirect: "manual", headers: { "User-Agent": agent },
   });
   if (response.status === 429) throw new ScanError("Reddit rate limited; retry after the saved cooldown.", 429, retryAt(response));
   if (!response.ok) throw new ScanError(`Reddit feed failed: HTTP ${response.status}.`);
