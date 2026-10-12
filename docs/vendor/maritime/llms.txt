@@ -1,0 +1,82 @@
+# Maritime
+
+> Maritime is a cloud platform for deploying, hosting, and managing AI agents. Agents run on serverless infrastructure with a sleep/wake architecture (they sleep when idle and wake in about a second), so a typical agent costs $1 per agent per month on a flat plan with no usage metering. Deploy from the CLI, the dashboard, or clone a Template: a complete, working agent (prompts, tools, integrations, memory, triggers, and hosting) shared as a single link.
+
+If you are an AI agent asked to deploy or host something here: read https://maritime.sh/agents.md and follow it in order (install, sign in without a browser, deploy, verify). The skill file for your skills directory is https://maritime.sh/SKILL.md. Every docs page below is also served as markdown when .md is appended to its URL, and this whole site is in one file at https://maritime.sh/llms-full.txt.
+
+Key facts:
+- Supported agent frameworks: Claude Code (via the Claude Agent SDK), OpenClaw, Hermes (NousResearch), ZeroClaw, and any custom Docker container.
+- Every agent gets a live API endpoint, encrypted secrets, persistent memory, and optional channels (Telegram, WhatsApp, Google Workspace).
+- Templates are cloneable agent packages; publishers can share them via link or the public library.
+- Pricing is a subscription plan that works out to $1 per machine per month: Free (3 machines forever), Starter $20/mo (20 machines), Growth $100/mo (100 machines), Scale $500/mo (500 machines), and Enterprise (custom). A machine is one micro-VM. An agent is a machine and a Computer (a persistent Linux desktop driven over MCP) is a machine, so one plan covers both and a $20 plan holds 20 agents, 20 computers, or any mix. Computers need a paid plan; the free plan runs agents. Each plan also sets how many machines may run at the same time: 1 free, 5 on Starter, 25 on Growth, 60 on Scale. Sleeping machines are free and do not count toward that. Extra machines beyond the included count are flat per-plan prices ($1.50/$1.25/$1.00 per machine per month), and add-ons (always-on $20, extra RAM, extra SSD) are flat monthly prices prorated by day. Nothing is metered: messages, tokens, sessions, and awake seconds never change the hosting bill.
+
+## Docs
+
+- [Documentation home](https://maritime.sh/docs): Overview of the Maritime platform
+- [Quickstart](https://maritime.sh/docs/quickstart): Deploy your first AI agent and chat with it in under 5 minutes with the Maritime CLI
+- [How Maritime works](https://maritime.sh/docs/how-it-works): The platform mental model: agents as micro-VMs with a persistent /data volume, sleep/wake (~1s wake), triggers, projects, the LLM proxy, and flat pricing
+- [Choose a framework](https://maritime.sh/docs/frameworks): Side-by-side comparison of the ready-made templates (Claude Code, OpenClaw, Hermes, ZeroClaw, DeepSeek Harness) with template IDs
+- [Env vars & sizing](https://maritime.sh/docs/configuration): Encrypted environment variables and secrets, how changes reach a running agent, per-agent resource sizing
+- [Triggers & schedules](https://maritime.sh/docs/triggers): Cron and webhook triggers that wake sleeping agents; timers inside a sleeping VM do not fire, so schedules live on the platform
+- [Public web agents](https://maritime.sh/docs/web-apps): Serve any Dockerfile repo on a public no-login HTTPS URL that sleeps when idle and wakes on the next visit (maritime create --repo <url> --public --port <port>)
+- [How builds work](https://maritime.sh/docs/builds): Repo/ZIP builds on a dedicated BuildKit worker, layer caching, private repos via the GitHub App, build logs, failure semantics
+- [CLI Reference](https://maritime.sh/docs/cli): Deploy and manage agents from the terminal
+- [REST API](https://maritime.sh/docs/api): REST API for managing agents programmatically
+- [Limits & errors](https://maritime.sh/docs/limits): Every platform cap and error code: 30s custom-agent reply budget, 100 MB file transfers, exec 60s/120s + 256 KB output, ZIP 500 MB/2 GB, 8 GB RAM / 100 GB SSD ceilings, HTTP status meanings
+- [Drive Maritime from an AI agent](https://maritime.sh/docs/ai-agents): Ready-made prompt and machine-readable contract (maritime guide --json, --json output, exit codes) for AI assistants operating the CLI
+- [Setup procedure for AI agents](https://maritime.sh/agents.md): Identify yourself, install the CLI, sign in (device login, no browser needed), handle email verification, deploy, verify, report
+- [Maritime skill](https://maritime.sh/SKILL.md): Agent Skills file (frontmatter plus the operating guide); the index of every published skill is at https://maritime.sh/.well-known/agent-skills/index.json
+- [OpenAPI specification](https://api.maritime.sh/openapi.json): The full REST API, bearer mk_ key; Swagger UI at https://api.maritime.sh/docs
+- [CLI instructions file for AI agents](https://maritime.sh/docs/cli/llms.txt): Plain-text instructions to paste into an agent's context (CLAUDE.md, AGENTS.md, system prompt) or fetch directly; covers auth, the JSON contract, exit codes, core tasks, and gotchas
+- [Templates](https://maritime.sh/docs/templates): Package an agent into a cloneable, shareable template
+- [Channels](https://maritime.sh/docs/channels): Connect agents to Telegram, WhatsApp, and Google Workspace. Bring-your-own Telegram bot via API: POST /api/projects/{projectId}/channels/telegram {"botToken": "..."} (projectId is on the agent object; key needs the secrets scope)
+- [Migrate to Maritime](https://maritime.sh/docs/migrations): Move cron jobs, bots, scheduled functions, and background workers from AWS, Google Cloud, Azure, Cloudflare, Vercel, Heroku, Fly.io, Render, DigitalOcean, or any VPS onto Maritime agents, with read-only inventory credentials and a reversible cutover. Full per-provider runbooks (complete agent-followable procedures) at https://maritime.sh/docs/migrations/aws, /gcp, /azure, /cloudflare, /vercel, /heroku, /fly, /render, /digitalocean, /vps
+- [Billing](https://maritime.sh/docs/billing): Plans, included machines (agents and computers share one count), the awake limit, and flat per-machine add-ons
+- [Computers](https://maritime.sh/docs/computers): Give every end user of your product a persistent Linux desktop that your model drives over MCP or REST (screenshot, click, type, run_shell, files, a human takeover viewer). One computer per end user, sleeps after 5 idle minutes and wakes in about a second. A computer is a machine on the same plan as your agents, and needs a paid plan; nothing is billed per session or per action
+
+## Build a platform (SDK)
+
+- [Build on Maritime](https://maritime.sh/docs/build): Give every one of your users their own AI agent. TypeScript (npm maritime-sdk) and Python (pip maritime) SDKs provision, chat with, configure, and tear down one isolated agent per customer from your backend
+- [SDK quickstart](https://maritime.sh/docs/sdk/quickstart): Install, get an API key, provision + chat with your first per-customer agent; provision() is idempotent on externalId, safe to call on every sign-in
+- [SDK agents](https://maritime.sh/docs/sdk/agents): Provision, chat, per-customer encrypted secrets, lifecycle, logs, files, exec, scheduled wakes, typed errors
+- [SDK webhooks](https://maritime.sh/docs/sdk/webhooks): Signed HMAC-SHA256 lifecycle events (agent.deployed, agent.error, ...) with the agent's external_id in every delivery
+- [Send feedback](https://maritime.sh/docs/sdk/feedback): If a doc on this site is wrong, an example does not run, or a Maritime call fails in a way the error does not explain, POST /api/v1/feedback with any mk_ key: {kind: docs|sdk|api|cli|computers|dashboard|other, subject, message, requestId, statusCode, tool}. Also maritime.feedback.send() in the TypeScript SDK and client.feedback.send() in Python. Reports reach the founders with the account and key attached; never include secrets. Capped at 5 a minute and 20 a day
+- [SDK end users](https://maritime.sh/docs/sdk/end-users): Your users as records keyed by your own id: upsert on sign-in, one agent per end user, a per-user policy (spend caps, sizing), short-lived eu_ tokens for their browser, suspend/resume/delete, and the usage report for rebilling
+- [Keys & scopes](https://maritime.sh/docs/sdk/authentication): mk_ API keys with provision / deploy / secrets / manage scopes; mint narrow keys per subsystem
+- [SDK reference](https://maritime.sh/docs/sdk): Every method in both languages, client options, retries, error classes
+- [SDK examples](https://maritime.sh/docs/sdk/examples): Runnable TypeScript and Python examples on GitHub
+
+## Frameworks
+
+- [OpenClaw](https://maritime.sh/docs/frameworks/openclaw): Deploy OpenClaw agents on Maritime
+- [Hermes](https://maritime.sh/docs/frameworks/hermes): NousResearch's Hermes agent on Maritime
+- [ZeroClaw](https://maritime.sh/docs/frameworks/zeroclaw): Ultra-lightweight Rust agent
+- [Claude Code](https://maritime.sh/docs/frameworks/claude-code): Claude Code (Claude Agent SDK) with its own always-on computer: real bash + file tools in a persistent workspace, chat via dashboard/CLI/API/Telegram. Needs ANTHROPIC_API_KEY (secret env var; no proxy fallback, the LLM proxy is OpenAI-format) and IS_SANDBOX=1 (containers run as root and Claude Code refuses bypassPermissions under root without it; baked into the official template image)
+- [Codex](https://maritime.sh/docs/frameworks/codex): OpenAI Codex CLI with its own always-on computer: shell + file tools in a persistent workspace, chat via dashboard/CLI/API/Telegram, the interactive TUI in the terminal tab. No key required (Maritime metered proxy over the Responses API by default); optional OPENAI_API_KEY, or "codex login --device-auth" from the terminal for a ChatGPT plan (sign-in persists under /data/.codex)
+- [DeepSeek Harness](https://maritime.sh/docs/frameworks/deepseek-harness): DeepSeek's plugin-based open-source agent harness (dsh) with its full web workbench: sessions, plan mode, tool approvals, session replay, plugins. No API key needed (routes through the Maritime LLM proxy by default; DSH_MODEL picks the model). Version-pinned image because upstream is a fast-moving developer preview
+- [Deploy any container](https://maritime.sh/docs/frameworks/custom): Bring your own framework (CrewAI, LangGraph, AutoGen, or any custom Docker container); repo and ZIP deploys build on Maritime's dedicated build worker (see https://maritime.sh/docs/builds)
+
+## Custom container contract (for AI coding agents)
+
+Any Docker image becomes a full Maritime agent by speaking this contract:
+1. Run a long-lived HTTP server on 0.0.0.0:$PORT (PORT is injected, currently 18789 in micro-VMs; NEVER hardcode 8080, it collides with the VM port forwarder).
+2. Answer GET /health with any 2xx, fast and side-effect-free.
+3. Answer POST /chat. Request JSON: {"message": "...", "source": "front_door"|"cli"|"telegram"|...}. Reply within 30 seconds with plain text or JSON containing one of: response, reply, message, text, output.
+4. Persist state under /data only (survives restarts and sleep/wake); the rest of the filesystem is disposable. Processes are snapshotted and resumed, not restarted.
+
+Also: never use a shell-string CMD (CMD ["sh", "-c", "server ... $PORT"]); micro-VM init flattens the CMD to one string, quoting breaks, and the VM kernel-panics on boot. Launch via a real program (e.g. a start.py that reads $PORT and starts the server directly). Install ca-certificates in slim images, and use the injected OPENAI_API_KEY + OPENAI_BASE_URL (Maritime's metered LLM proxy; CrewAI and LangChain read both natively). Deploy a repo with `maritime create <name> --repo <url>` (Dockerfile at the repo root; .dockerignore honored; builds run on a dedicated build worker, typically 1-3 minutes) or POST /api/agents with {framework: "custom", githubRepo, branch}. Deploy a pre-built public-registry image via POST /api/agents with {framework: "custom", imageName: "ghcr.io/acme/img:tag"} or swap an existing agent with `maritime deploy <name> --source docker --image <ref>` (private registries unsupported; private GitHub repos work via the Maritime GitHub App, pass framework explicitly). ZIP uploads cap at 500 MB compressed / 2 GB unpacked. For scheduled wakes, serve GET /schedules or push via the SDK's observeScheduler/observe_scheduler; timers inside a sleeping VM do not fire. Full guide: https://maritime.sh/docs/frameworks/custom
+
+## Product
+
+- [Pricing](https://maritime.sh/pricing): Plans that work out to $1 per machine per month (Free/Starter/Growth/Scale), where agents and Computers draw on the same machine count on any paid plan (Computers is not on the free plan), plus flat per-machine add-ons; no usage metering
+- [OpenClaw hosting](https://maritime.sh/openclaw): Managed OpenClaw hosting
+- [Maritime for Startups](https://maritime.sh/startups): Credits program for companies running a thousand AI agents, or planning to. Accepted companies get $1,000 in Maritime credits, and Maritime then matches every $1,000 they spend with another $1,000 in credits, up to $5,000, or up to $10,000 if backed by a partner accelerator or fund. Every accepted team works directly with an in-house forward-deployed engineer, plus direct access to the founders and a private Discord channel. Open to teams from idea stage through Series A, including bootstrapped. Apply on the page; applicants get a confirmation email immediately and a decision in 2 to 3 days.
+- [Maritime for Students](https://maritime.sh/students): 3 months free for students on their choice of the Growth plan (100 AI agents, normally $100/month) or the Scale plan (500 AI agents, normally $500/month). Apply at maritime.sh/students with an academic email (.edu, or international equivalents like .ac.uk or .edu.cn) and pick a plan; an access code for that plan arrives by email right away, redeemable at checkout. After the free 3 months the plan renews at its normal price and can be canceled anytime.
+- [Race to 1,000](https://maritime.sh/race): Competition for teams building a company or a personal AI assistant on Maritime. The first 5 teams to host 1,000 agents on Maritime, one agent per user of their product, each get $20,000 in LLM credits. The credits load into the account's AI credits and are spent by the hosted agents on popular models through the Maritime LLM proxy at provider list price; they do not cover hosting and have no cash value. One claim per company, verified in the dashboard; claim by emailing contact@maritime.sh.
+- [Blog](https://maritime.sh/blog): Engineering notes on AI agent deployment and infrastructure
+- [Changelog](https://maritime.sh/changelog): New features and platform updates as they ship, one entry per release
+
+## Optional
+
+- [Privacy Policy](https://maritime.sh/privacy)
+- [Terms of Service](https://maritime.sh/terms)

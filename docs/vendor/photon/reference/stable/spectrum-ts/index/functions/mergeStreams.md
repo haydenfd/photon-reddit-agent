@@ -1,0 +1,36 @@
+> ## Documentation Index
+> Fetch the complete documentation index at: https://docs.photon.codes/docs/llms.txt
+> Use this file to discover all available pages before exploring further.
+
+> ## Agent Instructions
+> Use Stable documentation by default. Honor an explicit Beta request or a URL under /docs/beta/. If the requested version conflicts with the installed CLI package or API origin, clarify the target before writing integration code.
+> Pages under /docs/beta/ document Beta; other product pages document Stable. Keep the CLI package, commands, API origin, and credentials within the selected version. State the documentation version in your answer.
+> For MCP search, always pass version: Stable or version: Beta. Unfiltered search mixes both versions. For filesystem reads, keep Beta queries under /beta/ and exclude /beta/ from Stable queries; discover paths before reading them.
+> The public docs base is https://photon.codes/docs. Convert MCP page paths to public URLs under that base, preserving /beta/ when present. Read https://photon.codes/docs/skill.md for version selection and https://photon.codes/docs/llms.txt for the version indexes.
+
+# mergeStreams
+
+```typescript
+mergeStreams(streams: readonly ManagedStream<T>[]): ManagedStream<T>
+```
+
+Merges a fixed set of streams. The result represents all of them: it ends
+once every member has ended — immediately, for an empty set — and one
+member's error ends the whole merge.
+
+For a set that changes while the stream runs, use `createStreamGroup`
+(`@spectrum-ts/core/authoring`), which ends only on `close()` and drops a
+failed member instead of tearing down its siblings.
+
+## Parameters
+
+<ResponseField name={"streams"} type={"readonly ManagedStream<T>[]"} required>
+  **Type:** <code>{"readonly "}[ManagedStream](/docs/reference/stable/spectrum-ts/index/interfaces/ManagedStream){"<T>[]"}</code>
+</ResponseField>
+
+## Returns
+
+<code>[ManagedStream](/docs/reference/stable/spectrum-ts/index/interfaces/ManagedStream){"<T>"}</code>
+
+
+This documentation is built and hosted on [Mintlify](https://mintlify.com), a developer documentation platform.

@@ -4,16 +4,15 @@
   "main": "src/worker.ts",
   "compatibility_date": "2025-04-01",
   "compatibility_flags": ["nodejs_compat"],
-  "workers_dev": false,
+  "workers_dev": true,
   "d1_databases": [{
     "binding": "DB",
     "database_name": "reddit-tracker",
-    // Local-only placeholder. Replace with the real D1 ID before deploying.
-    "database_id": "00000000-0000-0000-0000-000000000000",
+    "database_id": "9b4f1a5c-7c19-4649-bcbc-a8dfae977991",
     "migrations_dir": "migrations"
   }],
-  // Groundwork only: this schedule is inactive until an explicitly authorized deployment.
-  "triggers": { "crons": ["*/30 * * * *"] },
-  "vars": { "NOTIFY_ENABLED": "false", "SCAN_ENABLED": "false", "SCAN_SOURCE": "reddit", "SCAN_SUBREDDITS": "", "JEV_MODEL": "jev-latest" },
+  // No schedule yet: scans run manually with `crm run_scan`. Re-add "triggers": { "crons": ["*/30 * * * *"] } when ready.
+  "triggers": { "crons": [] },
+  "vars": { "NOTIFY_ENABLED": "false", "SCAN_ENABLED": "true", "SCAN_SOURCE": "reddit", "SCAN_SUBREDDITS": "cscareerquestions,csMajors,leetcode,ExperiencedDevs", "REDDIT_USER_AGENT": "web:photon-reddit-agent:0.1", "JEV_MODEL": "jev-latest" },
   "observability": { "enabled": true }
 }

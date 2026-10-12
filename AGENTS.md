@@ -43,5 +43,7 @@ Common tasks once it's installed:
 
 ## See also
 
+- Local Markdown copies of the Maritime and Photon (Stable) docs live in `docs/vendor/`; grep them before guessing provider behavior. Refresh with `scripts/fetch-vendor-docs.sh`.
+
 - [Spectrum docs](https://photon.codes/docs/spectrum-ts)
 - [`spectrum-ts` on GitHub](https://github.com/photon-hq/spectrum-ts)

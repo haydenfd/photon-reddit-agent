@@ -13,7 +13,8 @@
     "crm": "bun --no-env-file src/crm-cli.ts",
     "crm:import": "bun --no-env-file src/import-sqlite.ts",
     "leads": "bun --no-env-file src/leads.ts",
-    "leads:demo": "bun --no-env-file src/leads.ts examples/leads.json --demo"
+    "vm:pull": "maritime exec photon-reddit-agent -- bash -c 'cd /data/workspace/photon-reddit-agent && git pull && /data/.bun/bin/bun install --frozen-lockfile'",
+    "leads:demo":"bun --no-env-file src/leads.ts examples/leads.json --demo"
   },
   "dependencies": {
     "@photon-ai/advanced-imessage": "2.2.0",

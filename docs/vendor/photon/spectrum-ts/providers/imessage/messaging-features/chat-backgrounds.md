@@ -1,0 +1,79 @@
+> ## Documentation Index
+> Fetch the complete documentation index at: https://docs.photon.codes/docs/llms.txt
+> Use this file to discover all available pages before exploring further.
+
+> ## Agent Instructions
+> Use Stable documentation by default. Honor an explicit Beta request or a URL under /docs/beta/. If the requested version conflicts with the installed CLI package or API origin, clarify the target before writing integration code.
+> Pages under /docs/beta/ document Beta; other product pages document Stable. Keep the CLI package, commands, API origin, and credentials within the selected version. State the documentation version in your answer.
+> For MCP search, always pass version: Stable or version: Beta. Unfiltered search mixes both versions. For filesystem reads, keep Beta queries under /beta/ and exclude /beta/ from Stable queries; discover paths before reading them.
+> The public docs base is https://photon.codes/docs. Convert MCP page paths to public URLs under that base, preserving /beta/ when present. Read https://photon.codes/docs/skill.md for version selection and https://photon.codes/docs/llms.txt for the version indexes.
+
+# iMessage chat backgrounds
+
+> Set or clear an iMessage conversation background image.
+
+Set or clear the chat background image. Import `background` from the iMessage
+provider and use the sugar method on a narrowed space:
+
+```ts theme={null}
+import { background, imessage } from "spectrum-ts/providers/imessage";
+
+const im = imessage(space);
+
+// Set from a file path - MIME type inferred from the extension
+await im.background("./wallpaper.jpg");
+
+// Set from a buffer - mimeType is required
+await im.background(buffer, { mimeType: "image/jpeg" });
+
+// Clear the current background
+await im.background("clear");
+```
+
+`space.background(...)` is sugar for `space.send(background(...))`. The
+canonical form works on any space reference:
+
+```ts theme={null}
+await space.send(background("./wallpaper.jpg"));
+await space.send(background("clear"));
+```
+
+After a successful set, the background usually syncs to other users' devices
+within `30s`. The background asset is uploaded to iCloud and then distributed
+to the other members of the conversation. Display time is not a hard SLA:
+network state, iCloud state, and the Messages client state can all affect when
+the UI appears.
+
+| Stage | What happens |
+| - | - |
+| Before `background(...)` resolves | The provider waits until the background asset reaches a distributable state. |
+| After `background(...)` resolves | The conversation has accepted the background change; iCloud distributes the asset to other members. |
+| Other members' devices | The background appears after the device receives the iCloud distribution. |
+
+Background UI may not appear in these cases:
+
+| Case | Result |
+| - | - |
+| The recipient's network, iCloud, or Messages state is unhealthy | The background may appear late, often after reopening Messages. |
+| A group member has never spoken, interacted, or is treated by the system as unknown or untrusted | Apple may not show the background UI to that member. |
+
+<Note>
+  The second case is an Apple Messages display limit, not a Spectrum option. If
+  one group member never sees the background, have that member send a message
+  in the group, mark the sender as known, or reopen Messages before retrying the
+  background change.
+</Note>
+
+<Note>
+  Chat backgrounds require `@spectrum-ts/imessage`. With
+  `@spectrum-ts/imessage-local`, `background()` throws an
+  [UnsupportedError](/docs/reference/stable/spectrum-ts/symbols/unsupportederror).
+</Note>
+
+<Note>
+  The string `"clear"` is a reserved sentinel. If you have a file literally
+  named `clear` with no extension, pass `"./clear"` or load it as a `Buffer`.
+</Note>
+
+
+This documentation is built and hosted on [Mintlify](https://mintlify.com), a developer documentation platform.
